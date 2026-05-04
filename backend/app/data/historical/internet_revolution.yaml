@@ -1,0 +1,48 @@
+id: internet_revolution
+title: "互联网革命"
+period: "1990-2010"
+region: "Global (originated in USA)"
+domain: technology
+description: |
+  从蒂姆·伯纳斯-李在1991年发明万维网，到2000年互联网泡沫破裂，再到
+  Web 2.0和社交媒体的崛起，互联网在20年间彻底改变了人类的通信、商业、
+  媒体和社交方式。这一过程中的关键决策影响了今天数字世界的形态。
+
+key_data_points:
+  - { year: 1993, metric: "全球互联网用户", value: "约1400万", source: "ITU" }
+  - { year: 2000, metric: "全球互联网用户", value: "约4.13亿", source: "ITU" }
+  - { year: 2000, metric: "纳斯达克指数峰值", value: "5048点（3月10日）", source: "NASDAQ" }
+  - { year: 2002, metric: "纳斯达克指数谷底", value: "1114点（跌幅78%）", source: "NASDAQ" }
+  - { year: 2004, metric: "Facebook成立", value: "2月4日", source: "历史记录" }
+  - { year: 2010, metric: "全球互联网用户", value: "约20亿", source: "ITU" }
+
+decision_nodes:
+  - id: dn_www_open
+    year: 1993
+    title: "CERN宣布万维网技术免费开放"
+    description: "CERN决定不对万维网技术收取许可费，使其成为开放标准"
+    actual_outcome: "互联网快速普及，催生了无数创新企业和商业模式"
+    modifiable: true
+
+  - id: dn_netscape_ipo
+    year: 1995
+    title: "Netscape IPO 引爆互联网投资潮"
+    description: "网景公司上市首日股价暴涨，标志着互联网商业化的起点"
+    actual_outcome: "大量风险资本涌入互联网领域，加速了技术发展但也催生了泡沫"
+    modifiable: true
+
+  - id: dn_dotcom_bust
+    year: 2000
+    title: "互联网泡沫破裂"
+    description: "大量缺乏盈利模式的互联网公司倒闭，纳斯达克指数暴跌"
+    actual_outcome: "行业洗牌后，Google、Amazon等幸存者成为巨头，Web 2.0兴起"
+    modifiable: true
+
+  - id: dn_iphone_launch
+    year: 2007
+    title: "iPhone发布开启移动互联网时代"
+    description: "苹果发布iPhone，触摸屏智能手机彻底改变了人们使用互联网的方式"
+    actual_outcome: "移动互联网爆发，App经济形成，社交媒体进入全民时代"
+    modifiable: true
+
+default_modification: "如果万维网技术被CERN作为专有技术收费授权"

@@ -1,0 +1,49 @@
+id: green_revolution
+title: "绿色革命"
+period: "1960-1990"
+region: "Global (South Asia, Southeast Asia, Latin America)"
+domain: agriculture
+description: |
+  20世纪60年代至90年代的绿色革命通过引入高产量品种（HYV）、化肥、
+  灌溉技术和农药，大幅提升了发展中国家的粮食产量。印度和菲律宾等国
+  从粮食进口国转变为自给自足甚至出口国。但同时也带来了土壤退化、
+  水资源过度使用、小农户被边缘化等问题。
+
+key_data_points:
+  - { year: 1961, metric: "全球谷物产量", value: "8.77亿吨", source: "FAO" }
+  - { year: 1970, metric: "全球谷物产量", value: "12.14亿吨", source: "FAO" }
+  - { year: 1980, metric: "全球谷物产量", value: "15.50亿吨", source: "FAO" }
+  - { year: 1990, metric: "全球谷物产量", value: "19.50亿吨", source: "FAO" }
+  - { year: 1970, metric: "印度小麦产量", value: "2350万吨（是1965年的2倍）", source: "USDA" }
+  - { year: 1985, metric: "全球化肥使用", value: "1.31亿吨（1961年的4倍）", source: "World Bank" }
+
+decision_nodes:
+  - id: dn_borlaug_wheat
+    year: 1962
+    title: "诺曼·博洛格的矮秆小麦推广"
+    description: "博洛格在墨西哥培育的半矮秆高产小麦品种开始向印度和巴基斯坦推广"
+    actual_outcome: "印度小麦产量在5年内翻倍，避免了预期中的大规模饥荒"
+    modifiable: true
+
+  - id: dn_ir8_rice
+    year: 1966
+    title: "IR8 '奇迹稻' 问世"
+    description: "国际水稻研究所（IRRI）发布IR8品种，产量是传统品种的5-10倍"
+    actual_outcome: "东南亚和南亚水稻产量大幅提升，菲律宾和印尼从进口国变为自给"
+    modifiable: true
+
+  - id: dn_fertilizer_subsidy
+    year: 1970
+    title: "发展中国家大规模化肥补贴"
+    description: "印度、印尼等国政府开始大规模补贴化肥，降低农民使用成本"
+    actual_outcome: "化肥使用量激增，产量大增但长期导致土壤酸化和水体富营养化"
+    modifiable: true
+
+  - id: dn_irrigation_expansion
+    year: 1975
+    title: "灌溉设施大规模扩建"
+    description: "世界银行和各国政府投资大型灌溉工程，尤其是印度旁遮普邦"
+    actual_outcome: "灌溉面积翻倍，但地下水位急剧下降，部分地区面临水危机"
+    modifiable: true
+
+default_modification: "如果绿色革命的产量增幅是实际的3倍"

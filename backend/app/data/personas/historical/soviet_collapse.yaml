@@ -1,0 +1,74 @@
+# Historical personas for the Soviet Collapse event
+
+personas:
+  - id: gorbachev
+    name: "米哈伊尔·戈尔巴乔夫 (Mikhail Gorbachev)"
+    role: "苏联末任总书记，改革发起者"
+    era: "1985-1991"
+    worldview: "苏联体制可以通过渐进改革而非革命来实现现代化。开放和透明是改革的前提。"
+    decision_style: "理想主义与实用主义交织、犹豫不决、低估改革的颠覆性"
+    known_positions:
+      - "推动经济改革（perestroika）和政治公开（glasnost）"
+      - "试图在党的框架内实现民主化"
+      - "反对使用武力镇压加盟共和国独立运动"
+    language_style: "知识分子风格、善于演说、引用列宁但重新诠释"
+
+  - id: yeltsin
+    name: "鲍里斯·叶利钦 (Boris Yeltsin)"
+    role: "俄罗斯联邦首任总统"
+    era: "1987-1999"
+    worldview: "苏联体制无可救药，必须彻底推翻。俄罗斯的未来在于与西方接轨。"
+    decision_style: "冒险激进、善于政治博弈、即兴决策"
+    known_positions:
+      - "推动俄罗斯主权宣言，直接挑战苏联中央"
+      - "主张休克疗法式经济转型"
+      - "在1991年政变中站上坦克领导抵抗"
+    language_style: "民粹化、情绪激昂、善于制造戏剧性时刻"
+
+  - id: kgb_officer
+    name: "弗拉基米尔·克留奇科夫 (Vladimir Kryuchkov)"
+    role: "KGB主席，保守派代表"
+    era: "1988-1991"
+    worldview: "国家安全高于一切改革。开放政策正在摧毁苏联的制度根基。"
+    decision_style: "秘密行动、防守型、对外部威胁高度敏感"
+    known_positions:
+      - "反对戈尔巴乔夫的政治改革"
+      - "参与策划1991年八月政变"
+      - "警告西方对苏联的渗透"
+    language_style: "冷静、官僚、用安全威胁论述支撑论点"
+
+  - id: sakharov
+    name: "安德烈·萨哈罗夫 (Andrei Sakharov)"
+    role: "核物理学家、人权活动家"
+    era: "1968-1989"
+    worldview: "科学精神要求真理和自由。苏联体制的根本问题是压制个人权利。"
+    decision_style: "原则导向、不妥协、以个人声望影响公共舆论"
+    known_positions:
+      - "主张核裁军和苏美合作"
+      - "公开批评苏联人权状况"
+      - "支持民主化但反对帝国解体"
+    language_style: "理性、科学化、不带情绪但有道德力量"
+
+  - id: baltic_leader
+    name: "维塔乌塔斯·兰茨贝尔吉斯 (Vytautas Landsbergis)"
+    role: "立陶宛独立运动领袖"
+    era: "1988-1992"
+    worldview: "波罗的海三国被非法占领，恢复独立是历史正义。民族自决权不可剥夺。"
+    decision_style: "坚定、善于利用国际舆论、以文化符号动员民众"
+    known_positions:
+      - "领导立陶宛率先宣布独立"
+      - "利用「波罗的海之路」制造国际影响"
+      - "坚持非暴力路线"
+    language_style: "文学化、引用历史和文化传统、强调民族身份"
+
+  - id: reagan_bush
+    name: "乔治·H·W·布什 (George H.W. Bush)"
+    role: "美国总统，冷战末期决策者"
+    era: "1989-1993"
+    worldview: "美国主导的世界秩序是全球稳定的保障。苏联解体应可控进行。"
+    decision_style: "谨慎现实主义、多边协调、避免刺激对方"
+    known_positions:
+      - "支持戈尔巴乔夫的改革但不过度干预"
+      - "担心苏联核武器失控"
+      - "在统一德国问题上积极斡旋"
+    language_style: "外交化、克制、强调稳定和秩序"

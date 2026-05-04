@@ -33,6 +33,25 @@ class Settings(BaseSettings):
     causal_max_nodes: int = 30
     causal_propagation_depth: int = 4
 
+    # Local Model (Ollama) — leave blank to use Claude for everything
+    ollama_base_url: str = ""  # e.g. "http://localhost:11434"
+    ollama_model: str = "qwen2.5:7b"  # default model tag in Ollama
+
+    # Multi-model pool — comma-separated list of Ollama model tags
+    # e.g. "qwen2.5:7b,llama3.1:8b,mistral:7b,yi:6b,gemma2:9b"
+    # Each model is assigned to a debate persona for cognitive diversity.
+    # If blank, falls back to ollama_model for all personas.
+    ollama_model_pool: str = ""
+
+    # Strong backend override — set to "ollama" to use local models for
+    # synthesis/analysis too (not recommended for quality, but useful for
+    # fully offline experiments). Leave blank to always use Claude.
+    strong_backend_override: str = ""  # "ollama" or ""
+
+    # Auto-loop: max sequential feedback loops before stopping
+    auto_loop_max_cycles: int = 10
+    auto_loop_pause_seconds: float = 5.0
+
     model_config = {"env_file": ".env", "env_prefix": "WHATIF_"}
 
 

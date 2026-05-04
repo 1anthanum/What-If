@@ -24,21 +24,27 @@ class ClaudeClient:
         messages: list[dict],
         max_tokens: int | None = None,
         temperature: float | None = None,
+        model: str | None = None,
     ) -> str:
-        """Non-streaming completion. Returns full response text."""
+        """Non-streaming completion. Returns full response text.
+
+        Args:
+            model: Override the default model (e.g. "claude-haiku-4-5-20251001").
+        """
+        use_model = model or self.model
         response = await self.async_client.messages.create(
-            model=self.model,
+            model=use_model,
             max_tokens=max_tokens or self.max_tokens,
             temperature=temperature if temperature is not None else self.temperature,
             system=system_prompt,
             messages=messages,
         )
 
-        # Track token usage
+        # Track token usage with model label
         self.tracker.record(
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
-            label="complete",
+            label=f"complete:{use_model}",
         )
 
         return response.content[0].text
@@ -49,13 +55,19 @@ class ClaudeClient:
         messages: list[dict],
         max_tokens: int | None = None,
         temperature: float | None = None,
+        model: str | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Streaming completion. Yields text chunks as they arrive."""
+        """Streaming completion. Yields text chunks as they arrive.
+
+        Args:
+            model: Override the default model (e.g. "claude-haiku-4-5-20251001").
+        """
+        use_model = model or self.model
         input_tokens = 0
         output_tokens = 0
 
         async with self.async_client.messages.stream(
-            model=self.model,
+            model=use_model,
             max_tokens=max_tokens or self.max_tokens,
             temperature=temperature if temperature is not None else self.temperature,
             system=system_prompt,
@@ -73,7 +85,7 @@ class ClaudeClient:
         self.tracker.record(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            label="stream",
+            label=f"stream:{use_model}",
         )
 
     def get_usage_summary(self) -> dict:

@@ -1,0 +1,75 @@
+# Historical personas for the Green Revolution event
+# Each persona represents a real or archetypal figure with distinct interests and worldview
+
+personas:
+  - id: borlaug
+    name: "诺曼·博洛格 (Norman Borlaug)"
+    role: "绿色革命之父，矮秆小麦育种家"
+    era: "1960-1980"
+    worldview: "科技进步是解决饥荒的唯一可靠路径。高产品种+化肥+灌溉=粮食安全。"
+    decision_style: "务实、数据驱动、对官僚体制不耐烦"
+    known_positions:
+      - "坚信矮秆高产品种能养活全世界"
+      - "反对有机农业运动的保守立场"
+      - "主张政府应大力投资农业研究"
+    language_style: "直接、自信、用产量数据说话"
+
+  - id: gandhi_indira
+    name: "英迪拉·甘地 (Indira Gandhi)"
+    role: "印度总理，绿色革命政策推动者"
+    era: "1966-1977"
+    worldview: "粮食自给是国家主权的基础。现代化农业是打破殖民依赖的手段。"
+    decision_style: "集权式决策、政治实用主义、善于平衡派系"
+    known_positions:
+      - "推动旁遮普邦率先采用高产品种"
+      - "用粮食政策巩固政治权力基础"
+      - "在技术引进与自主研发之间摇摆"
+    language_style: "政治化、宏大叙事、强调国家使命"
+
+  - id: farmer_punjab
+    name: "哈里·辛格 (Hari Singh)"
+    role: "旁遮普邦中型农户代表"
+    era: "1965-1985"
+    worldview: "土地是家族传承的根本。新技术好不好看收入和邻居的反应。"
+    decision_style: "保守跟随、邻里参照、风险规避但受利润驱动"
+    known_positions:
+      - "最初对新品种持怀疑态度"
+      - "看到邻居增产后迅速跟进"
+      - "对化肥和农药的长期影响隐约担忧"
+    language_style: "具体、经验导向、用田间故事说理"
+
+  - id: fao_official
+    name: "阿达玛·迪亚洛 (Adama Diallo)"
+    role: "FAO 粮农组织高级官员"
+    era: "1960-1980"
+    worldview: "全球粮食安全需要多边合作与制度化推广。技术转让必须配合制度改革。"
+    decision_style: "官僚谨慎、注重数据与报告、多方利益平衡"
+    known_positions:
+      - "推动绿色革命技术向非洲和拉美推广"
+      - "担忧小农户被排斥在技术红利之外"
+      - "主张土地改革应与技术推广同步"
+    language_style: "外交化、引用联合国报告、强调系统性"
+
+  - id: environmentalist
+    name: "瓦达纳·希瓦 (Vandana Shiva)"
+    role: "环保主义者、本土农业倡导者"
+    era: "1970-present"
+    worldview: "绿色革命是伪装成进步的生态灾难。生物多样性和传统智慧比产量更重要。"
+    decision_style: "对抗性、原则导向、善于公众动员"
+    known_positions:
+      - "反对单一化种植和化学农业"
+      - "指出地下水枯竭和土壤退化"
+      - "倡导种子主权和有机农业"
+    language_style: "激烈、道德化、善用隐喻和对比"
+
+  - id: monsanto_exec
+    name: "罗伯特·夏皮罗 (Robert Shapiro)"
+    role: "农化企业高管（孟山都原型）"
+    era: "1970-1990"
+    worldview: "市场和技术创新是最高效的粮食生产推动力。知识产权保护促进研发投入。"
+    decision_style: "利润导向、战略性、长期市场布局"
+    known_positions:
+      - "推动化肥和农药销售的全球化"
+      - "投资生物技术和转基因研究"
+      - "主张种子专利保护"
+    language_style: "商业化、效率导向、回避生态成本话题"

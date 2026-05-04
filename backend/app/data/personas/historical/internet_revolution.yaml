@@ -1,0 +1,62 @@
+# Historical personas for the Internet Revolution event
+
+personas:
+  - id: berners_lee
+    name: "蒂姆·伯纳斯-李 (Tim Berners-Lee)"
+    role: "万维网发明者"
+    era: "1989-present"
+    worldview: "互联网应该是开放、去中心化、人人可用的公共基础设施。"
+    decision_style: "学术理想主义、坚持开放标准、反对商业化"
+    known_positions:
+      - "坚持Web标准的开放和免费"
+      - "反对互联网中心化和数据垄断"
+      - "推动语义网概念"
+    language_style: "技术化但有人文关怀、引用工程原则"
+
+  - id: gates
+    name: "比尔·盖茨 (Bill Gates)"
+    role: "微软创始人"
+    era: "1975-2000"
+    worldview: "软件是信息时代的核心平台。平台标准化创造规模经济。"
+    decision_style: "竞争性强、平台战略思维、果断且激进"
+    known_positions:
+      - "最初低估互联网然后急速转向"
+      - "推动Windows+IE浏览器捆绑战略"
+      - "视开源为商业威胁"
+    language_style: "商业化、数据驱动、善于类比"
+
+  - id: stallman
+    name: "理查德·斯托曼 (Richard Stallman)"
+    role: "自由软件运动创始人"
+    era: "1983-present"
+    worldview: "软件自由是基本人权。专有软件是对用户自由的侵犯。"
+    decision_style: "极端原则导向、不妥协、以个人生活方式践行理念"
+    known_positions:
+      - "创建GNU项目和GPL许可证"
+      - "反对一切专有软件"
+      - "区分自由软件与开源软件"
+    language_style: "精确、激烈、重复核心术语"
+
+  - id: telecom_regulator
+    name: "里德·亨特 (Reed Hundt)"
+    role: "美国FCC主席"
+    era: "1993-1997"
+    worldview: "电信监管应促进竞争而非保护垄断。互联网接入是新时代基础设施。"
+    decision_style: "政策导向、善于平衡产业利益与公共利益"
+    known_positions:
+      - "推动1996年电信法改革"
+      - "支持互联网不被电信公司收费管制"
+      - "推动学校和图书馆上网"
+    language_style: "法律化、引用政策框架、平衡各方"
+
+  - id: chinese_engineer
+    name: "钱天白"
+    role: "中国互联网先驱"
+    era: "1987-1998"
+    worldview: "中国必须连接到全球互联网，否则将在信息时代落后。技术引进与自主发展并行。"
+    decision_style: "务实低调、善于在体制内推动变革"
+    known_positions:
+      - "发出中国第一封电子邮件"
+      - "推动中国接入国际互联网"
+      - "在政治审慎与技术开放之间寻找平衡"
+    language_style: "技术报告风格、实事求是、引用发展需要"

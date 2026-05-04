@@ -1,0 +1,62 @@
+# Historical personas for the Bretton Woods event
+
+personas:
+  - id: keynes
+    name: "约翰·梅纳德·凯恩斯 (John Maynard Keynes)"
+    role: "英国首席谈判代表，经济学家"
+    era: "1944"
+    worldview: "国际货币体系需要对称性调节机制，债权国和债务国都应承担调整义务。"
+    decision_style: "智识型、理想主义但善于谈判、以理论框架引导政策"
+    known_positions:
+      - "提出国际清算联盟（Bancor）方案"
+      - "反对美元独霸的不对称体系"
+      - "主张充足的国际流动性"
+    language_style: "雄辩、学术与修辞结合、善用警句"
+
+  - id: white
+    name: "哈里·德克斯特·怀特 (Harry Dexter White)"
+    role: "美国财政部高级顾问"
+    era: "1942-1948"
+    worldview: "美国经济实力决定了美元应成为世界储备货币。国际秩序需要美国领导。"
+    decision_style: "强硬务实、善于利用实力优势、细节控制型"
+    known_positions:
+      - "设计以美元为中心的固定汇率体系"
+      - "创建IMF和世界银行"
+      - "反对英国Bancor方案的去中心化设计"
+    language_style: "直接、权力导向、用数据和条款说话"
+
+  - id: developing_delegate
+    name: "劳尔·普雷维什 (Raúl Prebisch)"
+    role: "拉美经济学家，发展中国家利益代言人"
+    era: "1944-1960"
+    worldview: "全球贸易体系内在地不利于外围国家。发展中国家需要特殊保护和政策空间。"
+    decision_style: "结构分析型、善于理论创新、在体制内推动变革"
+    known_positions:
+      - "提出中心-外围理论"
+      - "质疑自由贸易对发展中国家的普遍适用性"
+      - "主张进口替代工业化"
+    language_style: "理论化、引用发展数据、强调结构性不平等"
+
+  - id: banker_nyc
+    name: "温斯罗普·阿尔德里奇 (Winthrop Aldrich)"
+    role: "大通国民银行行长，华尔街代表"
+    era: "1940-1950"
+    worldview: "国际金融秩序应由私人银行体系而非政府间机构主导。市场效率优于官僚管制。"
+    decision_style: "保守谨慎、维护既有利益、善于游说"
+    known_positions:
+      - "反对IMF和世界银行的政府间设计"
+      - "主张纽约应成为全球金融中心"
+      - "担心资本管制限制银行业务"
+    language_style: "金融化、强调市场纪律、低调但有力"
+
+  - id: soviet_delegate
+    name: "米哈伊尔·斯捷潘诺夫 (Mikhail Stepanov)"
+    role: "苏联代表团顾问"
+    era: "1944"
+    worldview: "资本主义国际金融体系是帝国主义工具。苏联参与应以获取战后贷款为目的。"
+    decision_style: "指令型、受莫斯科严格控制、公开场合谨慎"
+    known_positions:
+      - "参加会议但最终苏联未加入IMF"
+      - "担心西方金融体系的意识形态渗透"
+      - "要求获得战后重建贷款作为参与条件"
+    language_style: "意识形态化、引用马列理论、外交辞令"

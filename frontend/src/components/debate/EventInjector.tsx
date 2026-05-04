@@ -1,5 +1,5 @@
 /**
- * UI for injecting events mid-debate.
+ * Event injection UI with warm ambient styling.
  */
 
 import { useState } from 'react';
@@ -26,22 +26,46 @@ export function EventInjector({ sessionId }: EventInjectorProps) {
   };
 
   return (
-    <div className="flex gap-2">
-      <input
-        type="text"
-        value={event}
-        onChange={e => setEvent(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && handleInject()}
-        placeholder="注入突发事件（如：东南亚遭遇严重旱灾）"
-        className="flex-1 bg-surface-800 border border-surface-200/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-yellow-400/50 placeholder-surface-200/30"
-      />
-      <button
-        onClick={handleInject}
-        disabled={!event.trim()}
-        className="bg-yellow-400/10 border border-yellow-400/20 text-yellow-400 hover:bg-yellow-400/20 disabled:opacity-30 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm transition-colors"
-      >
-        {injected ? '✓ 已注入' : '⚡ 注入'}
-      </button>
+    <div className="relative">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-mono text-earth-rust/50 tracking-widest uppercase">
+          ⚡ Event Injection
+        </span>
+        <span className="flex-1 h-px bg-earth-rust/10" />
+      </div>
+      <div className="flex gap-2">
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            value={event}
+            onChange={e => setEvent(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleInject()}
+            placeholder="注入突发事件（如：东南亚遭遇严重旱灾、全球贸易战爆发）"
+            className="w-full bg-deep-800/40 border border-earth-rust/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder-deep-300/25 transition-all focus:border-earth-rust/30 focus:shadow-none"
+            style={{ boxShadow: 'none' }}
+          />
+          {event.trim() && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-mono text-earth-rust/30">
+              ENTER ↵
+            </span>
+          )}
+        </div>
+        <button
+          onClick={handleInject}
+          disabled={!event.trim()}
+          className={`
+            px-5 py-2.5 rounded-lg text-xs font-mono tracking-wider transition-all
+            ${injected
+              ? 'bg-earth-green/10 border border-earth-green/30 text-earth-green shadow-glow-green'
+              : event.trim()
+                ? 'bg-earth-rust/10 border border-earth-rust/20 text-earth-rust hover:bg-earth-rust/15 hover:border-earth-rust/30'
+                : 'bg-deep-800/30 border border-deep-400/10 text-deep-300/30 cursor-not-allowed'
+            }
+          `}
+        >
+          {injected ? '✓ INJECTED' : '⚡ INJECT'}
+        </button>
+      </div>
     </div>
   );
 }

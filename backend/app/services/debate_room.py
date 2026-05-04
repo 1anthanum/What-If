@@ -1,9 +1,16 @@
-"""AI Debate Room — core service for multi-persona scenario debates."""
+"""AI Debate Room — core service for multi-persona scenario debates.
+
+Multi-model support:
+    When WHATIF_OLLAMA_MODEL_POOL is configured, each persona is backed by
+    a different local model (round-robin assignment), producing genuine
+    cognitive diversity — different architectures reach different conclusions.
+"""
 
 import uuid
 from typing import AsyncGenerator
 
 from app.core.claude_client import ClaudeClient
+from app.core.inference import InferenceBackend, get_backend_for_persona
 from app.core.prompt_engine import PromptEngine
 from app.core.streaming import sse_event
 from app.core.token_tracker import TokenTracker
@@ -169,11 +176,16 @@ class DebateRoomService:
         })
 
         # Each persona takes a turn
-        for persona in session.personas:
+        for idx, persona in enumerate(session.personas):
+            # Select backend for this persona (round-robin from model pool)
+            backend: InferenceBackend = get_backend_for_persona(self.tracker, idx)
+            model_name = backend.backend_name()
+
             yield sse_event("persona_start", {
                 "persona_id": persona["id"],
                 "persona_name": persona["name"],
                 "persona_role": persona["role"],
+                "model": model_name,
             })
 
             # Build the user prompt for this persona
@@ -184,9 +196,9 @@ class DebateRoomService:
                 round_number=round_num,
             )
 
-            # Stream the response
+            # Stream the response via the assigned backend
             full_response = []
-            async for chunk in self.claude.stream(
+            async for chunk in backend.stream(
                 system_prompt=persona["system_prompt"],
                 messages=[{"role": "user", "content": user_prompt}],
                 max_tokens=800,

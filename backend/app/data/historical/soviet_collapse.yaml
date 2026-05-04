@@ -1,0 +1,48 @@
+id: soviet_collapse
+title: "苏联解体"
+period: "1985-1995"
+region: "Soviet Union / Post-Soviet States"
+domain: geopolitics
+description: |
+  1991年苏联解体是20世纪最重大的地缘政治事件之一。从戈尔巴乔夫的改革开放
+  （glasnost和perestroika）到柏林墙倒塌，再到各加盟共和国独立，这一过程
+  深刻改变了全球政治格局、经济体系和安全架构。
+
+key_data_points:
+  - { year: 1985, metric: "苏联GDP", value: "约2.7万亿美元（PPP）", source: "CIA World Factbook" }
+  - { year: 1991, metric: "苏联GDP", value: "下降约15%", source: "World Bank" }
+  - { year: 1992, metric: "俄罗斯通胀率", value: "2509%", source: "IMF" }
+  - { year: 1989, metric: "柏林墙倒塌", value: "11月9日", source: "历史记录" }
+  - { year: 1991, metric: "独联体成立", value: "12月8日", source: "历史记录" }
+  - { year: 1993, metric: "俄罗斯贫困率", value: "约33%", source: "World Bank" }
+
+decision_nodes:
+  - id: dn_glasnost
+    year: 1986
+    title: "戈尔巴乔夫推行开放政策"
+    description: "glasnost（公开性）政策允许更大的言论自由和信息公开"
+    actual_outcome: "释放了对苏联体制的广泛批评，加速了政治改革进程"
+    modifiable: true
+
+  - id: dn_berlin_wall
+    year: 1989
+    title: "柏林墙倒塌"
+    description: "东德开放边境，柏林墙被推倒，冷战象征性终结"
+    actual_outcome: "东欧剧变加速，两德统一，北约东扩的起点"
+    modifiable: true
+
+  - id: dn_august_coup
+    year: 1991
+    title: "八月政变失败"
+    description: "苏联强硬派试图推翻戈尔巴乔夫的政变在三天内失败"
+    actual_outcome: "叶利钦崛起，苏联共产党被禁止活动，加盟共和国加速独立"
+    modifiable: true
+
+  - id: dn_shock_therapy
+    year: 1992
+    title: "俄罗斯实施休克疗法"
+    description: "叶利钦政府在盖达尔建议下实施快速自由化经济改革"
+    actual_outcome: "恶性通胀、国有资产被寡头瓜分、GDP大幅下降、社会动荡"
+    modifiable: true
+
+default_modification: "如果戈尔巴乔夫采取渐进式改革而非激进开放"

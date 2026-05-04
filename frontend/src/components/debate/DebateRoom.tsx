@@ -75,20 +75,35 @@ export function DebateRoom() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Scenario Header */}
-      <div className="bg-surface-800/50 border border-surface-200/10 rounded-xl p-5">
-        <p className="text-xs text-primary-500 uppercase tracking-wider mb-1">当前场景</p>
-        <h2 className="text-lg font-semibold">{scenario}</h2>
-        <div className="flex gap-2 mt-3">
-          {personas.map(p => (
-            <span
-              key={p.id}
-              className="text-xs bg-surface-200/5 border border-surface-200/10 px-2 py-1 rounded"
-            >
-              {p.name}
+      <div className="relative glass rounded-xl p-6 corner-marks overflow-hidden">
+        {/* Subtle gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-amber-300/[0.03] via-transparent to-amber-600/[0.02] pointer-events-none" />
+
+        <div className="relative">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-[10px] font-mono text-amber-300/40 tracking-widest uppercase">
+              ▸ Active Scenario
             </span>
-          ))}
+            <span className="flex-1 h-px bg-amber-300/10" />
+            <span className="text-[10px] font-mono text-deep-200/30">
+              SID: {sessionId?.slice(0, 8)}
+            </span>
+          </div>
+
+          <h2 className="text-lg font-semibold text-white mb-4">{scenario}</h2>
+
+          <div className="flex flex-wrap gap-2">
+            {personas.map(p => (
+              <span
+                key={p.id}
+                className="text-[10px] font-mono bg-deep-800/50 border border-deep-400/10 text-deep-200/60 px-2.5 py-1 rounded tracking-wider"
+              >
+                {p.name}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -100,16 +115,20 @@ export function DebateRoom() {
       {/* Rounds */}
       {rounds.map((round) => (
         <div key={round.round_number} className="space-y-3">
+          {/* Round Header */}
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-medium text-surface-200/60">
-              第 {round.round_number} 轮
-            </h3>
+            <span className="text-[10px] font-mono text-amber-300/40 tracking-widest uppercase">
+              Round {String(round.round_number).padStart(2, '0')}
+            </span>
+            <span className="flex-1 h-px bg-deep-400/10" />
             {round.injected_event && (
-              <span className="text-xs bg-yellow-400/10 text-yellow-400 px-2 py-0.5 rounded">
+              <span className="text-[10px] font-mono bg-earth-rust/5 border border-earth-rust/15 text-earth-rust/80 px-3 py-1 rounded tracking-wider">
                 ⚡ {round.injected_event}
               </span>
             )}
           </div>
+
+          {/* Statements */}
           <div className="grid gap-3">
             {round.statements.map((stmt) => (
               <PersonaCard
@@ -126,30 +145,62 @@ export function DebateRoom() {
 
       {/* Summary */}
       {summary && (
-        <div className="bg-surface-800/50 border border-primary-500/20 rounded-xl p-5">
-          <p className="text-xs text-primary-500 uppercase tracking-wider mb-2">分析师摘要</p>
-          <div className="text-sm text-surface-200/80 whitespace-pre-wrap">{summary}</div>
+        <div className="relative glass rounded-xl p-6 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-600/[0.03] via-transparent to-amber-300/[0.02] pointer-events-none" />
+          <div className="relative">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-[10px] font-mono text-amber-300/50 tracking-widest uppercase">
+                ◈ System Analysis
+              </span>
+              <span className="flex-1 h-px bg-amber-300/10" />
+            </div>
+            <div className="text-sm text-deep-100/75 leading-relaxed whitespace-pre-wrap">
+              {summary}
+            </div>
+          </div>
         </div>
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 pt-2">
         <button
           onClick={handleRunRound}
           disabled={isStreaming || status === 'starting'}
-          className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors"
+          className={`
+            flex-1 relative overflow-hidden font-mono text-sm tracking-wider py-3.5 rounded-lg transition-all duration-300
+            ${isStreaming
+              ? 'bg-amber-300/[0.06] border border-amber-300/15 text-amber-300'
+              : 'bg-gradient-to-r from-amber-700 to-amber-600 text-white shadow-glow hover:shadow-glow-lg btn-glow'
+            }
+            disabled:opacity-40 disabled:cursor-not-allowed
+          `}
         >
-          {isStreaming
-            ? `第 ${currentRound} 轮进行中…`
-            : `开始第 ${currentRound + 1} 轮辩论`}
+          {isStreaming ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-3.5 h-3.5 border-2 border-amber-300/30 border-t-amber-300 rounded-full animate-spin" />
+              ROUND {String(currentRound).padStart(2, '0')} IN PROGRESS
+            </span>
+          ) : (
+            <span className="flex items-center justify-center gap-2">
+              ▶ EXECUTE ROUND {String(currentRound + 1).padStart(2, '0')}
+            </span>
+          )}
         </button>
+
         {rounds.length > 0 && !isStreaming && (
           <button
             onClick={handleSummary}
             disabled={isSummarizing}
-            className="bg-surface-800 hover:bg-surface-200/10 border border-surface-200/10 text-white font-medium py-3 px-6 rounded-lg transition-colors disabled:opacity-40"
+            className="font-mono text-sm tracking-wider bg-deep-800/50 hover:bg-deep-700/50 border border-deep-400/15 hover:border-amber-300/15 text-deep-100/70 hover:text-amber-300/80 py-3.5 px-6 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isSummarizing ? '生成中…' : '生成摘要'}
+            {isSummarizing ? (
+              <span className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 border-2 border-amber-300/30 border-t-amber-300 rounded-full animate-spin" />
+                ANALYZING
+              </span>
+            ) : (
+              '◈ SYNTHESIZE'
+            )}
           </button>
         )}
       </div>

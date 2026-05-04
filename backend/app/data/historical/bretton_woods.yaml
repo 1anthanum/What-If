@@ -1,0 +1,49 @@
+id: bretton_woods
+title: "布雷顿森林体系"
+period: "1944-1973"
+region: "Global"
+domain: geopolitics
+description: |
+  1944年布雷顿森林会议确立了以美元为中心的国际货币体系：美元与黄金挂钩
+  （35美元/盎司），其他货币与美元挂钩。这一体系支撑了战后经济繁荣，
+  但也让美国承担了过大的国际责任。1971年尼克松宣布美元与黄金脱钩，
+  标志着布雷顿森林体系的终结，开启了浮动汇率时代。
+
+key_data_points:
+  - { year: 1944, metric: "参会国家", value: "44国", source: "历史记录" }
+  - { year: 1945, metric: "美国黄金储备", value: "约200亿美元（占全球75%）", source: "US Treasury" }
+  - { year: 1960, metric: "美国黄金储备", value: "约178亿美元", source: "US Treasury" }
+  - { year: 1971, metric: "美国黄金储备", value: "约102亿美元", source: "US Treasury" }
+  - { year: 1971, metric: "尼克松冲击", value: "8月15日宣布美元与黄金脱钩", source: "历史记录" }
+  - { year: 1973, metric: "主要货币", value: "全面转向浮动汇率", source: "IMF" }
+
+decision_nodes:
+  - id: dn_dollar_standard
+    year: 1944
+    title: "确立美元—黄金标准"
+    description: "凯恩斯提议的国际货币单位'bancor'被否决，改采美元为核心"
+    actual_outcome: "美元成为世界储备货币，美国获得'过度特权'但也承担巨大责任"
+    modifiable: true
+
+  - id: dn_imf_worldbank
+    year: 1945
+    title: "IMF和世界银行成立"
+    description: "国际货币基金组织负责汇率稳定，世界银行负责发展贷款"
+    actual_outcome: "建立了战后国际经济治理框架，但也被批评为服务于西方利益"
+    modifiable: true
+
+  - id: dn_nixon_shock
+    year: 1971
+    title: "尼克松冲击：美元与黄金脱钩"
+    description: "面对黄金外流和通胀压力，尼克松单方面宣布美元不再兑换黄金"
+    actual_outcome: "布雷顿森林体系崩溃，全球进入浮动汇率时代，通胀加剧"
+    modifiable: true
+
+  - id: dn_petrodollar
+    year: 1974
+    title: "石油美元体系确立"
+    description: "美国与沙特达成协议：石油以美元计价，沙特将石油收入投资美国国债"
+    actual_outcome: "美元霸权在后布雷顿森林时代得以维持，但增加了全球金融系统性风险"
+    modifiable: true
+
+default_modification: "如果1944年采纳了凯恩斯的'bancor'国际货币方案"
