@@ -609,9 +609,12 @@ export const orchestratorApi = {
 
 // ─── Auto-Loop Types ──────────────────────────────────────
 
+export type AutoLoopMode = 'historical' | 'philosophical';
+
 export interface AutoLoopConfig {
-  event_id: string;
   seed_hypothesis: string;
+  mode?: AutoLoopMode;
+  event_id?: string;
   max_cycles?: number;
   max_iterations_per_loop?: number;
   time_horizon?: string;

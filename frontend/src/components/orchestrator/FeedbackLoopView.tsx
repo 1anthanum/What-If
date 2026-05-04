@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useOrchestratorStore } from '../../store/orchestratorStore';
 import { useCounterfactualStore } from '../../store/counterfactualStore';
+import { useAutoLoopStore } from '../../store/autoLoopStore';
+import { AutoLoopView } from './AutoLoopView';
 import type { FeedbackLoopConfig } from '../../services/api';
+
+type OrchestratorMode = 'single' | 'autonomous';
 
 const MODULE_LABELS: Record<string, string> = {
   counterfactual: '反事实推演',
@@ -20,6 +24,7 @@ const MODULE_ICONS: Record<string, string> = {
 export function FeedbackLoopView() {
   const store = useOrchestratorStore();
   const cfStore = useCounterfactualStore();
+  const autoStore = useAutoLoopStore();
 
   const {
     status,
@@ -32,6 +37,9 @@ export function FeedbackLoopView() {
     convergenceAchieved,
     tokenUsage,
   } = store;
+
+  // --- Mode toggle ---
+  const [mode, setMode] = useState<OrchestratorMode>('single');
 
   // --- Config form state ---
   const [modification, setModification] = useState('');
@@ -64,8 +72,43 @@ export function FeedbackLoopView() {
           )
         : 0;
 
+  // Only show mode toggle when both modes are idle
+  const canToggleMode = status === 'idle' && autoStore.status === 'idle';
+
   return (
     <div className="space-y-8">
+      {/* ── Mode Toggle ──────────────────────────────── */}
+      {canToggleMode && (
+        <div className="flex items-center justify-center gap-1 bg-deep-800/40 rounded-lg p-1 border border-deep-400/8 max-w-md mx-auto">
+          <button
+            onClick={() => setMode('single')}
+            className={`flex-1 py-2 px-4 rounded-md text-xs font-mono transition-all duration-300 ${
+              mode === 'single'
+                ? 'bg-amber-300/15 text-amber-300/80 border border-amber-300/20 shadow-glow-sm'
+                : 'text-deep-200/35 hover:text-deep-200/60 border border-transparent'
+            }`}
+          >
+            <span className="mr-1.5">◈</span>单次闭环
+          </button>
+          <button
+            onClick={() => setMode('autonomous')}
+            className={`flex-1 py-2 px-4 rounded-md text-xs font-mono transition-all duration-300 ${
+              mode === 'autonomous'
+                ? 'bg-amber-300/15 text-amber-300/80 border border-amber-300/20 shadow-glow-sm'
+                : 'text-deep-200/35 hover:text-deep-200/60 border border-transparent'
+            }`}
+          >
+            <span className="mr-1.5">∞</span>自主探索
+          </button>
+        </div>
+      )}
+
+      {/* ── Autonomous Mode ─────────────────────────── */}
+      {mode === 'autonomous' && <AutoLoopView />}
+
+      {/* ── Single Loop Mode ────────────────────────── */}
+      {mode === 'single' && (
+        <>
       {/* ── Config / Input ──────────────────────────────── */}
       {status === 'idle' && (
         <div className="glass border border-amber-300/8 rounded-lg p-6 space-y-5">
@@ -244,6 +287,8 @@ export function FeedbackLoopView() {
             ))}
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

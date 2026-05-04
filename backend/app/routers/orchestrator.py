@@ -40,9 +40,15 @@ async def get_loop_result(loop_id: str):
 # ─── Auto-Loop Endpoints ──────────────────────────────────────
 
 class AutoLoopRequest(BaseModel):
-    """Request body for autonomous exploration."""
-    event_id: str
+    """Request body for autonomous exploration.
+
+    Two modes:
+      - "historical": full orchestrator pipeline (requires event_id)
+      - "philosophical": debate-only loop (event_id optional)
+    """
     seed_hypothesis: str
+    mode: str = Field(default="historical", pattern="^(historical|philosophical)$")
+    event_id: str = ""
     max_cycles: int = Field(default=5, ge=1, le=20)
     max_iterations_per_loop: int = Field(default=2, ge=1, le=5)
     time_horizon: str = "30 years"
@@ -53,15 +59,19 @@ async def run_auto_loop(req: AutoLoopRequest):
     """
     Run autonomous continuous exploration. Returns SSE stream.
 
-    Chains multiple feedback loops sequentially. After each loop, the system
-    extracts the next hypothesis from the synthesis and starts a new loop.
-    Continues until convergence, max_cycles, or cancellation.
+    mode="historical": Chains full orchestrator feedback loops. Requires event_id.
+    mode="philosophical": Pure debate loop — 5 philosophical personas argue
+      the question, synthesize, extract the next sub-question, repeat.
     """
+    if req.mode == "historical" and not req.event_id:
+        raise HTTPException(400, "historical mode requires event_id")
+
     return create_sse_response(
         _auto_loop.run(
-            event_id=req.event_id,
             seed_hypothesis=req.seed_hypothesis,
             max_cycles=req.max_cycles,
+            mode=req.mode,
+            event_id=req.event_id,
             max_iterations_per_loop=req.max_iterations_per_loop,
             time_horizon=req.time_horizon,
         )
@@ -83,6 +93,7 @@ async def get_auto_loop_result(session_id: str):
         raise HTTPException(status_code=404, detail="Auto-loop session not found")
     return {
         "session_id": result.session_id,
+        "mode": result.mode,
         "event_id": result.event_id,
         "seed_hypothesis": result.seed_hypothesis,
         "total_cycles": result.total_cycles,

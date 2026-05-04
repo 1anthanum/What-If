@@ -151,3 +151,72 @@ input:focus, textarea:focus, select:focus {
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(212, 165, 116, 0.12), transparent);
 }
+
+/* ──── Auto-Loop Animations ──── */
+
+/* Gentle fade in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out both;
+}
+
+/* Flowing particles down the spine */
+@keyframes flowParticle {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.animate-flow-particle {
+  animation: flowParticle 4s linear infinite;
+}
+
+/* Slow ambient pulse for active nodes */
+@keyframes pulseSlow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.15); }
+}
+.animate-pulse-slow {
+  animation: pulseSlow 3s ease-in-out infinite;
+}
+
+/* Expanding ping ring for active node */
+@keyframes pingSlow {
+  0% { transform: scale(1); opacity: 0.5; }
+  75%, 100% { transform: scale(1.8); opacity: 0; }
+}
+.animate-ping-slow {
+  animation: pingSlow 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Background breathing glow when running */
+@keyframes breathe {
+  0%, 100% { opacity: 0.3; transform: translate(-50%, 0) scale(1); }
+  50% { opacity: 0.7; transform: translate(-50%, 0) scale(1.05); }
+}
+.animate-breathe {
+  animation: breathe 6s ease-in-out infinite;
+}
+
+/* Progress bar sweeping highlight */
+@keyframes sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.animate-sweep {
+  animation: sweep 3s ease-in-out infinite;
+}
+
+/* Glow shadows */
+.shadow-glow-sm {
+  box-shadow: 0 0 10px rgba(196, 144, 88, 0.08), 0 0 4px rgba(196, 144, 88, 0.04);
+}
+.shadow-glow {
+  box-shadow: 0 0 20px rgba(196, 144, 88, 0.12), 0 0 8px rgba(196, 144, 88, 0.06);
+}
+.shadow-glow-lg {
+  box-shadow: 0 0 30px rgba(196, 144, 88, 0.15), 0 0 12px rgba(196, 144, 88, 0.08);
+}
