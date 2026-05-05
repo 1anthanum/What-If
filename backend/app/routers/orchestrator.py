@@ -45,6 +45,11 @@ class AutoLoopRequest(BaseModel):
     Two modes:
       - "historical": full orchestrator pipeline (requires event_id)
       - "philosophical": debate-only loop (event_id optional)
+
+    Options:
+      - adversarial: enable devil's advocate mode (philosophical only)
+      - extract_stances: extract per-persona stance matrix each cycle
+      - branching: return top-3 candidate questions (not just 1)
     """
     seed_hypothesis: str
     mode: str = Field(default="historical", pattern="^(historical|philosophical)$")
@@ -52,6 +57,9 @@ class AutoLoopRequest(BaseModel):
     max_cycles: int = Field(default=5, ge=1, le=20)
     max_iterations_per_loop: int = Field(default=2, ge=1, le=5)
     time_horizon: str = "30 years"
+    adversarial: bool = False
+    extract_stances: bool = False
+    branching: bool = False
 
 
 @router.post("/auto-loop")
@@ -74,6 +82,9 @@ async def run_auto_loop(req: AutoLoopRequest):
             event_id=req.event_id,
             max_iterations_per_loop=req.max_iterations_per_loop,
             time_horizon=req.time_horizon,
+            adversarial=req.adversarial,
+            extract_stances=req.extract_stances,
+            branching=req.branching,
         )
     )
 

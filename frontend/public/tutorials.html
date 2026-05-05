@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What-If 平台 — 功能教程</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+  :root {
+    --bg: #0C0A09;
+    --bg-card: rgba(15, 13, 12, 0.85);
+    --amber: #D4A574;
+    --amber-dim: rgba(212, 165, 116, 0.4);
+    --amber-glow: rgba(212, 165, 116, 0.08);
+    --text: #A8A29E;
+    --text-bright: #E7E5E4;
+    --text-dim: rgba(120, 117, 113, 0.6);
+    --border: rgba(212, 165, 116, 0.08);
+    --blue: #60A5FA;
+    --rose: #FB7185;
+    --emerald: #34D399;
+    --purple: #A78BFA;
+    --red: #EF4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Noto Sans SC', sans-serif;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout ── */
+  .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+  header {
+    padding: 60px 0 40px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: 0.02em;
+  }
+  header .subtitle {
+    font-size: 13px;
+    color: var(--amber-dim);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 8px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* ── Navigation ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(12, 10, 9, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+  }
+  nav .container {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  nav a {
+    display: inline-block;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    text-decoration: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  nav a:hover, nav a.active {
+    color: var(--amber);
+    border-color: rgba(212, 165, 116, 0.15);
+    background: var(--amber-glow);
+  }
+
+  /* ── Sections ── */
+  section {
+    padding: 56px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  section:last-of-type { border-bottom: none; }
+
+  h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .badge {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 3px 10px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .badge-core { background: rgba(212, 165, 116, 0.12); color: var(--amber); }
+  .badge-advanced { background: rgba(167, 139, 250, 0.12); color: var(--purple); }
+  .badge-viz { background: rgba(52, 211, 153, 0.12); color: var(--emerald); }
+
+  .section-desc {
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 32px;
+    max-width: 680px;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-bright);
+    margin: 28px 0 12px;
+  }
+
+  /* ── Steps ── */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .step {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 16px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: border-color 0.2s;
+  }
+  .step:hover { border-color: rgba(212, 165, 116, 0.15); }
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(212, 165, 116, 0.1);
+    color: var(--amber);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+  }
+  .step-content { flex: 1; }
+  .step-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+  }
+  .step-desc {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* ── Diagrams (ASCII-style) ── */
+  .diagram {
+    background: rgba(15, 13, 12, 0.9);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+  .diagram pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text);
+    white-space: pre;
+  }
+  .diagram .hl-amber { color: var(--amber); }
+  .diagram .hl-blue { color: var(--blue); }
+  .diagram .hl-rose { color: var(--rose); }
+  .diagram .hl-emerald { color: var(--emerald); }
+  .diagram .hl-purple { color: var(--purple); }
+  .diagram .hl-red { color: var(--red); }
+  .diagram .hl-dim { color: var(--text-dim); }
+
+  /* ── UI Mockups ── */
+  .mockup {
+    background: rgba(15, 13, 12, 0.9);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 2px;
+    margin: 20px 0;
+    overflow: hidden;
+  }
+  .mockup-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(42, 38, 36, 0.6);
+    border-bottom: 1px solid var(--border);
+  }
+  .mockup-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .mockup-dot-r { background: rgba(239, 68, 68, 0.4); }
+  .mockup-dot-y { background: rgba(212, 165, 116, 0.4); }
+  .mockup-dot-g { background: rgba(110, 191, 139, 0.4); }
+  .mockup-content {
+    padding: 20px;
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ── Inline elements ── */
+  .heatmap-cell {
+    display: inline-block;
+    width: 36px; height: 28px;
+    border-radius: 3px;
+    text-align: center;
+    line-height: 28px;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 1px;
+  }
+  .heatmap-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 0;
+  }
+  .heatmap-label {
+    width: 70px;
+    text-align: right;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .bar-track {
+    height: 12px;
+    background: rgba(42, 38, 36, 0.4);
+    border-radius: 2px;
+    overflow: hidden;
+    flex: 1;
+  }
+  .bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .stat-box {
+    text-align: center;
+    padding: 8px;
+    background: rgba(42, 38, 36, 0.3);
+    border-radius: 4px;
+  }
+  .stat-value {
+    font-size: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    color: rgba(255, 255, 255, 0.6);
+  }
+  .stat-label {
+    font-size: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 2px;
+  }
+
+  /* ── Tree nodes ── */
+  .tree-node {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 0;
+  }
+  .tree-icon {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--amber-dim);
+    width: 16px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .tree-text {
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .tree-alt {
+    opacity: 0.35;
+    font-style: italic;
+  }
+  .tree-tag {
+    font-size: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    border: 1px solid rgba(42, 38, 36, 0.3);
+    border-radius: 2px;
+    padding: 1px 4px;
+    margin-left: 6px;
+  }
+
+  /* ── Tips ── */
+  .tip {
+    display: flex;
+    gap: 12px;
+    padding: 14px 18px;
+    background: rgba(212, 165, 116, 0.04);
+    border: 1px solid rgba(212, 165, 116, 0.1);
+    border-radius: 6px;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+  .tip-icon { font-size: 16px; flex-shrink: 0; }
+  .tip-text { color: var(--text); }
+  .tip-text strong { color: var(--amber); font-weight: 500; }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 40px 0;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    nav .container { padding: 0 12px; }
+    .step { flex-direction: column; gap: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <h1>◈ What-If 功能教程</h1>
+    <p class="subtitle">交互式功能指南 · 4 核心模块 + 4 高级功能</p>
+  </div>
+</header>
+
+<nav>
+  <div class="container">
+    <a href="#debate">AI 辩论室</a>
+    <a href="#causal">因果图谱</a>
+    <a href="#counterfactual">历史反事实</a>
+    <a href="#orchestrator">闭环推演</a>
+    <a href="#heatmap">认知分歧图</a>
+    <a href="#adversary">对抗测试</a>
+    <a href="#forking">决策分支树</a>
+    <a href="#spectator">观战面板</a>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SECTION 1: AI 辩论室 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section id="debate">
+  <div class="container">
+    <h2>AI 辩论室 <span class="badge badge-core">核心模块</span></h2>
+    <p class="section-desc">
+      多个 AI 角色围绕你的假设展开回合制辩论。每个角色有独立的身份、立场和语言风格。
+      你可以随时注入新事件打断辩论走向。
+    </p>
+
+    <h3>操作流程</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">输入假设</div>
+          <div class="step-desc">在场景输入框中填写你的 what-if 假设，例如「如果全球粮食产量突然翻三倍，会发生什么？」。系统会自动推荐 4-6 个相关角色。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">观看辩论</div>
+          <div class="step-desc">每个角色依次发言，文字实时流式呈现。每张角色卡片左上角有颜色标识和角色图标。发言完成后会显示完整内容。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">注入事件（可选）</div>
+          <div class="step-desc">点击「注入事件」按钮，输入突发事件（如「旱灾来了」）。所有角色在下一回合必须回应这个新变量。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">查看分析摘要</div>
+          <div class="step-desc">点击「分析师摘要」查看 AI 生成的结构化总结：共识点、核心分歧、潜在风险。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram">
+      <pre>
+  <span class="hl-amber">回合 1</span>                     <span class="hl-amber">回合 2</span>                     <span class="hl-amber">回合 3</span>
+  ┌──────────────────┐       ┌──────────────────┐       ┌──────────────────┐
+  │ <span class="hl-blue">经济学家</span>: 产量翻倍 │       │ <span class="hl-blue">经济学家</span>: 价格已崩 │       │ <span class="hl-blue">经济学家</span>: 但旱灾... │
+  │ 会导致价格崩盘... │       │ 但粮食安全改善... │       │ 完全改变了局面   │
+  ├──────────────────┤       ├──────────────────┤       ├──────────────────┤
+  │ <span class="hl-emerald">农业部长</span>: 这对农 │  ───▶ │ <span class="hl-emerald">农业部长</span>: 同意经 │  ───▶ │ <span class="hl-emerald">农业部长</span>: 需要紧 │
+  │ 民收入是灾难...   │       │ 济学家的分析...   │       │ 急储备机制...     │
+  ├──────────────────┤       ├──────────────────┤       ├──────────────────┤
+  │ <span class="hl-rose">环保主义者</span>: 过度 │       │ <span class="hl-rose">环保主义者</span>: 土地 │       │ <span class="hl-rose">环保主义者</span>: 我早 │
+  │ 生产会破坏生态... │       │ 退化的风险...     │       │ 警告过了...       │
+  └──────────────────┘       └──────────────────┘       └──────────────────┘
+                                       ▲
+                              <span class="hl-red">【事件注入：旱灾来了】</span>
+      </pre>
+    </div>
+
+    <div class="tip">
+      <div class="tip-icon">💡</div>
+      <div class="tip-text"><strong>技巧</strong>：在辩论进入第 3-4 回合后注入事件效果最好——此时各角色已建立初步立场，新变量能产生更有戏剧性的转折。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SECTION 2: 因果图谱 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section id="causal">
+  <div class="container">
+    <h2>因果图谱 <span class="badge badge-core">核心模块</span></h2>
+    <p class="section-desc">
+      AI 将你的假设分解为因果网络：哪些变量影响哪些变量、影响是正向还是负向。
+      你可以"冲击"任何节点，观察级联效应沿因果链传播。
+    </p>
+
+    <h3>操作流程</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">生成因果图</div>
+          <div class="step-desc">输入场景后，AI 自动识别 10-20 个关键变量并建立因果关系。等待 SSE 流完成后，D3 力导向图自动渲染。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">浏览图谱</div>
+          <div class="step-desc">拖拽节点调整布局，滚轮缩放。节点颜色代表类别：<span style="color:#C49058">●经济</span> <span style="color:#8BA888">●社会</span> <span style="color:#6EBF8B">●环境</span> <span style="color:#8B9FBF">●政治</span>。线条颜色：绿=正向、赭=负向、蓝虚线=复杂关系。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">冲击节点</div>
+          <div class="step-desc">点击任意节点 → 侧边栏弹出 → 输入扰动描述（如「粮食价格下降 50%」）→ 点击「分析传播」。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">查看传播结果</div>
+          <div class="step-desc">受影响的节点会高亮，侧边栏显示每个节点的 AI 评估（影响程度、传播延迟、可能的反馈环）。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram">
+      <pre>
+                    <span class="hl-amber">粮食产量 ×3</span>
+                        │
+               <span class="hl-emerald">+ 正向</span>    │    <span class="hl-rose">- 负向</span>
+                ┌───────┼───────┐
+                ▼       ▼       ▼
+          <span style="color:#6EBF8B">土地压力</span>  <span style="color:#C49058">粮食价格</span>  <span style="color:#8BA888">粮食安全</span>
+                │       │       │
+                ▼       ▼       ▼
+          <span style="color:#6EBF8B">生物多样性</span> <span style="color:#C49058">农民收入</span> <span style="color:#8B9FBF">政治稳定</span>
+                        │
+                        ▼
+                   <span style="color:#8BA888">城市化率</span>
+                        │
+                        ▼
+                   <span style="color:#8B9FBF">选举走向</span> ←── <span class="hl-dim">反馈环？</span>
+      </pre>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SECTION 3: 历史反事实 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section id="counterfactual">
+  <div class="container">
+    <h2>历史反事实 <span class="badge badge-core">核心模块</span></h2>
+    <p class="section-desc">
+      选择一个历史事件，修改关键参数，AI 为你生成"如果当年不是那样"的替代时间线。
+      支持单一时间线、Ensemble 探索（多分支）、证伪引擎和用户知识注入。
+    </p>
+
+    <h3>四种模式</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">A</div>
+        <div class="step-content">
+          <div class="step-title">单一时间线</div>
+          <div class="step-desc">选择事件 → 修改假设 → 生成一条反事实时间线。每个时间点可展开查看 AI 的推理过程。可对生成的时间线运行「证伪分析」或「标注修正」。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">B</div>
+        <div class="step-content">
+          <div class="step-title">可能性探索 (Ensemble)</div>
+          <div class="step-desc">切换到「探索模式」→ 15 个快速模型并行发散 → 聚类为 3-4 个叙事方向 → 每个方向精炼为完整时间线。结果展示为扇形分支图，分支宽度反映共识度。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">C</div>
+        <div class="step-content">
+          <div class="step-title">吸引子检测</div>
+          <div class="step-desc">输入 3-5 个不同的修改假设 → 对每个假设运行 Ensemble → 跨所有结果寻找「无论怎么改都会发生」的收敛结局。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">D</div>
+        <div class="step-content">
+          <div class="step-title">具身视角</div>
+          <div class="step-desc">用历史真实人物（非抽象视角）作为探索代理。选择人物 → 每人按自身世界观探索 → 按「利益联盟」而非「叙事主题」聚类。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram">
+      <pre>
+  <span class="hl-amber">Ensemble 三阶段管线</span>
+
+  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+  │ <span class="hl-blue">Stage 1: 发散</span>    │    │ <span class="hl-purple">Stage 2: 聚类</span>   │    │ <span class="hl-emerald">Stage 3: 精炼</span>   │
+  │                 │    │                 │    │                 │
+  │ Haiku × 15     │───▶│ Sonnet × 1      │───▶│ Sonnet × 3-4   │
+  │ 并行短调用     │    │ 语义聚类        │    │ 完整时间线      │
+  │ ~300 tok/条    │    │ 分成 3-4 簇     │    │ ~2000 tok/条   │
+  │ 成本 ≈ $0.003  │    │ 成本 ≈ $0.01    │    │ 成本 ≈ $0.09   │
+  └─────────────────┘    └─────────────────┘    └─────────────────┘
+
+  <span class="hl-dim">总成本：≈ $0.10–0.15（与单次生成相当）</span>
+      </pre>
+    </div>
+
+    <div class="tip">
+      <div class="tip-icon">💡</div>
+      <div class="tip-text"><strong>证伪引擎</strong>：生成时间线后，点击「运行证伪分析」。AI 将以对抗性视角攻击时间线中最弱的因果推理，帮你识别哪些推断最不可靠。脆弱性评分 0-1，颜色从绿到红。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SECTION 4: 闭环推演 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section id="orchestrator">
+  <div class="container">
+    <h2>闭环推演 <span class="badge badge-core">核心模块</span></h2>
+    <p class="section-desc">
+      将多个模块串联成循环：反事实 → 因果图 → 辩论 → 反馈修正，或启动自主循环让 AI 持续迭代哲学问题。
+    </p>
+
+    <h3>两种模式</h3>
+
+    <div class="diagram">
+      <pre>
+  <span class="hl-amber">模式 A：反馈循环</span>
+
+     反事实时间线 ──▶ 因果图谱 ──▶ AI 辩论 ──┐
+          ▲                                    │
+          └──── 辩论结论作为约束 ◀─────────────┘
+                  (最多 3 轮迭代)
+
+  <span class="hl-purple">模式 B：自主哲学循环</span>
+
+     问题输入 ──▶ 5 个 Persona 辩论 ──▶ 综合 ──▶ 提取子问题 ──┐
+       ▲                                                        │
+       └────────────── 子问题作为新输入 ◀──────────────────────┘
+                       (最多 10 轮，可收敛)
+      </pre>
+    </div>
+
+    <h3>自主循环操作</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">选择模式</div>
+          <div class="step-desc">在闭环推演标签页中，切换到「自主探索」模式。选择「历史」或「哲学」子模式。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">配置参数</div>
+          <div class="step-desc">设置种子假设、最大循环数。哲学模式下可启用高级选项（对抗测试、分歧热力图、决策分支树）。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">启动并观察</div>
+          <div class="step-desc">点击启动后，系统自主运行。演化链实时显示假设如何从初始问题逐步深化。可随时取消。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SECTION 5: 认知分歧热力图 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section id="heatmap">
+  <div class="container">
+    <h2>认知分歧热力图 <span class="badge badge-advanced">高级功能</span></h2>
+    <p class="section-desc">
+      可视化各哲学 Persona 对辩论核心论点的立场差异。红色=反对，蓝色=支持，灰色=中立。
+      帮你一眼看清谁同意谁、分歧在哪里。
+    </p>
+
+    <h3>启用方式</h3>
+    <p style="font-size: 13px; margin-bottom: 16px;">
+      在自主循环配置中，开启 <strong style="color: var(--blue);">认知分歧提取</strong> 开关。系统会在每轮辩论后自动提取立场矩阵。
+    </p>
+
+    <h3>如何解读</h3>
+    <div class="mockup">
+      <div class="mockup-bar">
+        <div class="mockup-dot mockup-dot-r"></div>
+        <div class="mockup-dot mockup-dot-y"></div>
+        <div class="mockup-dot mockup-dot-g"></div>
+        <span style="font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); margin-left: 8px;">认知分歧矩阵 · 第 3 轮</span>
+      </div>
+      <div class="mockup-content">
+        <!-- Header row -->
+        <div class="heatmap-row">
+          <div class="heatmap-label"></div>
+          <div class="heatmap-cell" style="background: transparent; color: var(--text-dim);">自由意志</div>
+          <div class="heatmap-cell" style="background: transparent; color: var(--text-dim);">决定论</div>
+          <div class="heatmap-cell" style="background: transparent; color: var(--text-dim);">道德责任</div>
+          <div class="heatmap-cell" style="background: transparent; color: var(--text-dim);">因果链</div>
+        </div>
+        <!-- Data rows -->
+        <div class="heatmap-row">
+          <div class="heatmap-label" style="color: rgba(96, 165, 250, 0.6);">理性主义</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.5); color: rgba(96, 165, 250, 0.8);">+0.8</div>
+          <div class="heatmap-cell" style="background: rgba(239, 68, 68, 0.35); color: rgba(239, 68, 68, 0.7);">-0.4</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.55); color: rgba(96, 165, 250, 0.8);">+0.9</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.3); color: rgba(96, 165, 250, 0.7);">+0.3</div>
+        </div>
+        <div class="heatmap-row">
+          <div class="heatmap-label" style="color: rgba(251, 113, 133, 0.6);">存在主义</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.6); color: rgba(96, 165, 250, 0.8);">+0.9</div>
+          <div class="heatmap-cell" style="background: rgba(239, 68, 68, 0.55); color: rgba(239, 68, 68, 0.8);">-0.8</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.35); color: rgba(96, 165, 250, 0.7);">+0.5</div>
+          <div class="heatmap-cell" style="background: rgba(239, 68, 68, 0.25); color: rgba(239, 68, 68, 0.6);">-0.2</div>
+        </div>
+        <div class="heatmap-row">
+          <div class="heatmap-label" style="color: rgba(52, 211, 153, 0.6);">实用主义</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.25); color: rgba(96, 165, 250, 0.6);">+0.3</div>
+          <div class="heatmap-cell" style="background: rgba(100, 100, 120, 0.15); color: var(--text-dim);">·</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.4); color: rgba(96, 165, 250, 0.7);">+0.6</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.45); color: rgba(96, 165, 250, 0.7);">+0.7</div>
+        </div>
+        <div class="heatmap-row">
+          <div class="heatmap-label" style="color: rgba(212, 165, 116, 0.6);">东方哲学</div>
+          <div class="heatmap-cell" style="background: rgba(239, 68, 68, 0.25); color: rgba(239, 68, 68, 0.6);">-0.2</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.25); color: rgba(96, 165, 250, 0.6);">+0.3</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.3); color: rgba(96, 165, 250, 0.7);">+0.4</div>
+          <div class="heatmap-cell" style="background: rgba(96, 165, 250, 0.6); color: rgba(96, 165, 250, 0.8);">+0.9</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <div class="tip-icon">📖</div>
+      <div class="tip-text"><strong>解读要点</strong>：同一列颜色分化大 = 该论点是核心分歧所在。同一行颜色一致 = 该 Persona 立场明确。跨轮次对比时，注意某个 Persona 是否在新论据下改变了立场。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SECTION 6: 对抗性压力测试 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section id="adversary">
+  <div class="container">
+    <h2>对抗性压力测试 <span class="badge badge-advanced">高级功能</span></h2>
+    <p class="section-desc">
+      引入「魔鬼代言人」角色，专门攻击辩论中最弱的论点。
+      它会看到所有其他 Persona 的完整发言后再发动精准攻击。
+    </p>
+
+    <h3>启用方式</h3>
+    <p style="font-size: 13px; margin-bottom: 16px;">
+      在自主循环配置的高级选项中，开启 <strong style="color: var(--red);">对抗性测试</strong> 开关（红色按钮）。
+    </p>
+
+    <div class="diagram">
+      <pre>
+  <span class="hl-amber">两阶段辩论流程</span>
+
+  ┌──── Phase 1：正常辩论 ─────────────────────────────┐
+  │                                                     │
+  │  <span class="hl-blue">理性主义</span> → <span class="hl-rose">存在主义</span> → <span class="hl-emerald">实用主义</span> → <span class="hl-purple">东方哲学</span>  │
+  │  (4 个 Persona 依次发言)                            │
+  │                                                     │
+  └─────────────────────┬───────────────────────────────┘
+                        │ 所有发言汇总
+                        ▼
+  ┌──── Phase 2：对抗攻击 ─────────────────────────────┐
+  │                                                     │
+  │  <span class="hl-red">⚡ 魔鬼代言人</span>                                   │
+  │  看到全部 Phase 1 内容，找出最弱论点               │
+  │  给出 1-5 脆弱性评分 + 攻击向量                    │
+  │                                                     │
+  └─────────────────────────────────────────────────────┘
+      </pre>
+    </div>
+
+    <div class="tip">
+      <div class="tip-icon">⚡</div>
+      <div class="tip-text"><strong>魔鬼代言人的价值</strong>：它不是简单地「唱反调」，而是有策略地攻击——找到论证链中最脆弱的环节，提供反例，并评估如果这个论点被推翻会产生的连锁影响。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SECTION 7: 决策分支树 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section id="forking">
+  <div class="container">
+    <h2>决策分支树 <span class="badge badge-viz">可视化</span></h2>
+    <p class="section-desc">
+      每轮循环后，AI 不仅选择一个子问题继续，还展示未被选中的替代方向。
+      你可以看到「如果当时走了另一条路，会探索什么问题」。
+    </p>
+
+    <h3>启用方式</h3>
+    <p style="font-size: 13px; margin-bottom: 16px;">
+      在高级选项中开启 <strong style="color: var(--amber);">决策分支</strong> 开关。每轮会生成 3 个正交性最大化的候选问题。
+    </p>
+
+    <h3>可视化示例</h3>
+    <div class="mockup">
+      <div class="mockup-bar">
+        <div class="mockup-dot mockup-dot-r"></div>
+        <div class="mockup-dot mockup-dot-y"></div>
+        <div class="mockup-dot mockup-dot-g"></div>
+        <span style="font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); margin-left: 8px;">决策分支树 · 3 个分支点</span>
+      </div>
+      <div class="mockup-content" style="padding-left: 12px;">
+        <div class="tree-node">
+          <div class="tree-icon" style="color: var(--purple);">◈</div>
+          <div class="tree-text">意识是否可以被还原为物理过程？</div>
+        </div>
+        <div style="margin-left: 24px; border-left: 1px solid rgba(61, 56, 53, 0.3); padding-left: 12px;">
+          <div class="tree-node">
+            <div class="tree-icon">1</div>
+            <div class="tree-text">如果意识是涌现属性，那么人工意识在原则上是否可能？</div>
+          </div>
+          <div class="tree-node tree-alt">
+            <div class="tree-icon" style="opacity: 0.4;">↳</div>
+            <div class="tree-text">物理主义如何回应「感质论证」？<span class="tree-tag">未探索</span></div>
+          </div>
+          <div class="tree-node tree-alt">
+            <div class="tree-icon" style="opacity: 0.4;">↳</div>
+            <div class="tree-text">泛心论在当代物理学中有何新支撑？<span class="tree-tag">未探索</span></div>
+          </div>
+          <div style="margin-left: 24px; border-left: 1px solid rgba(61, 56, 53, 0.2); padding-left: 12px;">
+            <div class="tree-node">
+              <div class="tree-icon">2</div>
+              <div class="tree-text">图灵测试是否足以判定意识的存在？</div>
+            </div>
+            <div class="tree-node tree-alt">
+              <div class="tree-icon" style="opacity: 0.4;">↳</div>
+              <div class="tree-text">中文房间论证是否有效反驳了功能主义？<span class="tree-tag">未探索</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <div class="tip-icon">🌿</div>
+      <div class="tip-text"><strong>未探索分支</strong>的价值在于：它们揭示了你当前问题空间中「你没有问但值得问的方向」。这些分支可以成为你下一次探索的种子假设。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SECTION 8: 实时观战面板 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section id="spectator">
+  <div class="container">
+    <h2>实时观战面板 <span class="badge badge-viz">可视化</span></h2>
+    <p class="section-desc">
+      长时间运行的循环探索中，实时查看进度统计。纯前端计算，无额外 API 调用。
+    </p>
+
+    <h3>启用方式</h3>
+    <p style="font-size: 13px; margin-bottom: 16px;">
+      循环运行中，点击 HUD 右上角的 <strong style="color: var(--amber);">「观战」</strong> 按钮打开/关闭面板。
+    </p>
+
+    <h3>面板内容</h3>
+    <div class="mockup">
+      <div class="mockup-bar">
+        <div class="mockup-dot mockup-dot-r"></div>
+        <div class="mockup-dot mockup-dot-y"></div>
+        <div class="mockup-dot mockup-dot-g"></div>
+        <span style="font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); margin-left: 8px;">观战面板 <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(52, 211, 153, 0.6); margin-left: 4px;"></span></span>
+        <span style="font-size: 8px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); margin-left: auto;">LIVE</span>
+      </div>
+      <div class="mockup-content">
+        <!-- Stats -->
+        <div class="stat-grid">
+          <div class="stat-box">
+            <div class="stat-value">3/7</div>
+            <div class="stat-label">当前轮</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">04:32</div>
+            <div class="stat-label">已用时</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">06:18</div>
+            <div class="stat-label">预计剩余</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">186 字/分</div>
+            <div class="stat-label">产出速率</div>
+          </div>
+        </div>
+
+        <!-- Word bars -->
+        <div style="font-size: 8px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); margin-bottom: 4px;">各模型累计产出</div>
+        <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+          <span style="width: 50px; text-align: right; font-size: 9px; font-family: 'JetBrains Mono', monospace; color: rgba(96, 165, 250, 0.6);">理性主义</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 85%; background: rgba(96, 165, 250, 0.4);"></div></div>
+          <span style="font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); width: 40px; text-align: right;">2.4k</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+          <span style="width: 50px; text-align: right; font-size: 9px; font-family: 'JetBrains Mono', monospace; color: rgba(251, 113, 133, 0.6);">存在主义</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 72%; background: rgba(251, 113, 133, 0.4);"></div></div>
+          <span style="font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); width: 40px; text-align: right;">1.9k</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+          <span style="width: 50px; text-align: right; font-size: 9px; font-family: 'JetBrains Mono', monospace; color: rgba(52, 211, 153, 0.6);">实用主义</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 68%; background: rgba(52, 211, 153, 0.4);"></div></div>
+          <span style="font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); width: 40px; text-align: right;">1.8k</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+          <span style="width: 50px; text-align: right; font-size: 9px; font-family: 'JetBrains Mono', monospace; color: rgba(212, 165, 116, 0.6);">东方哲学</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 60%; background: rgba(212, 165, 116, 0.4);"></div></div>
+          <span style="font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); width: 40px; text-align: right;">1.6k</span>
+        </div>
+
+        <!-- Active indicator -->
+        <div style="display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px;">
+          <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(52, 211, 153, 0.6); animation: pulse 2s infinite;"></span>
+          <span style="font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim);">正在发言: 实用主义</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <div class="tip-icon">⏱️</div>
+      <div class="tip-text"><strong>预计剩余时间</strong>基于已完成轮次的平均耗时计算。前几轮可能不够准确，随着更多轮次完成会越来越精确。</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    What-If Macro Simulation · 功能教程 · Powered by Claude API
+  </div>
+</footer>
+
+<script>
+  // Sticky nav highlight
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('nav a');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  });
+</script>
+</body>
+</html>

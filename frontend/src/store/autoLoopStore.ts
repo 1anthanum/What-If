@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { autoLoopApi, type AutoLoopConfig, type AutoLoopMode } from '../services/api';
+import { autoLoopApi, type AutoLoopConfig, type AutoLoopMode, type StanceMatrix } from '../services/api';
 
 export type AutoLoopStatus = 'idle' | 'running' | 'complete' | 'cancelled' | 'error';
 
@@ -23,6 +23,10 @@ export interface CycleState {
   currentIteration: number;
   // Philosophical mode
   personas: PhilPersonaState[];
+  // Feature 1: Epistemic divergence
+  stanceMatrix: StanceMatrix | null;
+  // Feature 3: Branching candidates
+  candidateQuestions: string[];
 }
 
 interface AutoLoopState {
@@ -45,6 +49,15 @@ interface AutoLoopState {
   // Philosophical mode — active persona
   activePersonaId: string | null;
 
+  // Feature flags (from auto_start)
+  adversarial: boolean;
+  extractStances: boolean;
+  branching: boolean;
+
+  // Feature 4: Spectator mode stats
+  totalPersonaWords: Record<string, number>;   // persona_id → cumulative word count
+  spectatorOpen: boolean;
+
   // Timing
   startedAt: number | null;
   elapsedSeconds: number;
@@ -54,6 +67,7 @@ interface AutoLoopState {
   cancel: () => Promise<void>;
   reset: () => void;
   tick: () => void;
+  toggleSpectator: () => void;
 }
 
 const initialState = {
@@ -68,6 +82,11 @@ const initialState = {
   evolutionChain: [] as string[],
   stoppedReason: '',
   activePersonaId: null as string | null,
+  adversarial: false,
+  extractStances: false,
+  branching: false,
+  totalPersonaWords: {} as Record<string, number>,
+  spectatorOpen: false,
   startedAt: null as number | null,
   elapsedSeconds: 0,
 };
@@ -100,6 +119,9 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
               sessionId: event.data.session_id as string,
               maxCycles: event.data.max_cycles as number,
               mode: (event.data.mode as AutoLoopMode) ?? resolvedMode,
+              adversarial: (event.data.adversarial as boolean) ?? false,
+              extractStances: (event.data.extract_stances as boolean) ?? false,
+              branching: (event.data.branching as boolean) ?? false,
             });
             break;
 
@@ -114,6 +136,8 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
               activeModule: resolvedMode === 'philosophical' ? 'debate' : 'counterfactual',
               currentIteration: 0,
               personas: [],
+              stanceMatrix: null,
+              candidateQuestions: [],
             };
             set((s) => ({
               currentCycle: event.data.cycle as number,
@@ -171,7 +195,16 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
 
           case 'phil_persona_complete': {
             const pid2 = event.data.persona_id as string;
-            markPersonaDone(set, get, pid2, event.data.content as string);
+            const fullContent = event.data.content as string;
+            markPersonaDone(set, get, pid2, fullContent);
+            // Feature 4: Track cumulative word counts for spectator mode
+            const wordCount = fullContent.length;  // Chinese chars ≈ words
+            set((s) => ({
+              totalPersonaWords: {
+                ...s.totalPersonaWords,
+                [pid2]: (s.totalPersonaWords[pid2] ?? 0) + wordCount,
+              },
+            }));
             break;
           }
 
@@ -184,6 +217,20 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
             updateCurrentCycle(set, get, {
               synthesisPreview: event.data.synthesis as string,
               activeModule: null,
+            });
+            break;
+
+          // ── Feature 1: Stance matrix ──
+          case 'phil_stance_matrix':
+            updateCurrentCycle(set, get, {
+              stanceMatrix: event.data.matrix as StanceMatrix,
+            });
+            break;
+
+          // ── Feature 3: Candidate questions ──
+          case 'candidate_questions':
+            updateCurrentCycle(set, get, {
+              candidateQuestions: event.data.candidates as string[],
             });
             break;
 
@@ -261,6 +308,8 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
   },
 
   reset: () => set(initialState),
+
+  toggleSpectator: () => set((s) => ({ spectatorOpen: !s.spectatorOpen })),
 
   tick: () => {
     const { startedAt, status } = get();

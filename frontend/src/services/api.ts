@@ -618,6 +618,15 @@ export interface AutoLoopConfig {
   max_cycles?: number;
   max_iterations_per_loop?: number;
   time_horizon?: string;
+  adversarial?: boolean;
+  extract_stances?: boolean;
+  branching?: boolean;
+}
+
+// ─── Epistemic Divergence Map Types ──────────────────────
+export interface StanceMatrix {
+  arguments: string[];
+  stances: Record<string, number[]>;
 }
 
 export interface AutoLoopCycleSummary {

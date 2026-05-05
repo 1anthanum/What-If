@@ -85,6 +85,19 @@ PHILOSOPHICAL_PERSONAS = [
     },
 ]
 
+# Adversarial override: replaces critical_theorist's prompt when adversarial=True
+ADVERSARIAL_SYSTEM_PROMPT = (
+    "你是一位认知对抗专家（魔鬼代言人）。你的唯一使命是摧毁其他思想家论点中"
+    "最薄弱的环节。你不代表任何立场，只代表逻辑的严格性。\n\n"
+    "你的策略：\n"
+    "1. 找到其他思想家论证中最关键的隐含假设，并展示它不成立的情况\n"
+    "2. 构造具体的反例，而非抽象的否定\n"
+    "3. 指出哪些结论过度自信：证据不足以支撑如此强的声称\n"
+    "4. 揭示循环论证和偷换概念\n\n"
+    "对每个你攻击的论点，给出一个 1-5 分的脆弱性评分（5=致命缺陷）。\n"
+    "中文回答，400 字以内。语言锐利、精准，不留情面。"
+)
+
 
 class AutoLoopCycle:
     """Record of a single auto-loop cycle."""
@@ -138,6 +151,9 @@ class AutoLoopScheduler:
         event_id: str = "",
         max_iterations_per_loop: int = 2,
         time_horizon: str = "30 years",
+        adversarial: bool = False,
+        extract_stances: bool = False,
+        branching: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """Run autonomous exploration cycles.
 
@@ -160,6 +176,9 @@ class AutoLoopScheduler:
             "event_id": event_id,
             "seed_hypothesis": seed_hypothesis,
             "max_cycles": max_cycles,
+            "adversarial": adversarial,
+            "extract_stances": extract_stances,
+            "branching": branching,
         })
 
         current_hypothesis = seed_hypothesis
@@ -192,6 +211,8 @@ class AutoLoopScheduler:
                     async for ev in self._run_philosophical_cycle(
                         cycle_num, current_hypothesis, seed_hypothesis,
                         result.evolution_chain,
+                        adversarial=adversarial,
+                        extract_stances=extract_stances,
                     ):
                         # ev is a dict from sse_event(): {"type": ..., "data": ...}
                         ev_type = ev.get("type", "")
@@ -268,7 +289,21 @@ class AutoLoopScheduler:
             })
 
             # Extract next hypothesis / question
-            if mode == "philosophical":
+            if branching and mode == "philosophical":
+                candidates = await self._extract_candidate_questions(
+                    seed_hypothesis, current_hypothesis,
+                    cycle.synthesis, result.evolution_chain,
+                )
+                if candidates:
+                    yield sse_event("candidate_questions", {
+                        "cycle": cycle_num,
+                        "candidates": candidates,
+                    })
+                    # Default: pick the first candidate (user can override via branching UI)
+                    next_hypo = candidates[0] if candidates else ""
+                else:
+                    next_hypo = ""
+            elif mode == "philosophical":
                 next_hypo = await self._extract_next_question(
                     seed_hypothesis, current_hypothesis,
                     cycle.synthesis, result.evolution_chain,
@@ -323,12 +358,20 @@ class AutoLoopScheduler:
         question: str,
         seed_question: str,
         chain: list[str],
+        adversarial: bool = False,
+        extract_stances: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """One cycle of philosophical debate:
-        5 personas each give their perspective → synthesis.
+        5 personas each give their perspective → (optional adversarial) → synthesis.
+
+        When adversarial=True, the 5th persona (critical_theorist) becomes a
+        devil's advocate who reads all other responses and targets weaknesses.
+
+        When extract_stances=True, emits a phil_stance_matrix event after synthesis.
 
         Yields SSE events: phil_persona_start, phil_persona_chunk,
-        phil_persona_complete, phil_debate_done, phil_synthesis_done.
+        phil_persona_complete, phil_debate_done, phil_synthesis_done,
+        (optional) phil_stance_matrix.
         """
         # Build context from previous rounds
         history_context = ""
@@ -340,10 +383,11 @@ class AutoLoopScheduler:
                 + "\n\n请在此基础上深入，避免重复已有观点。\n\n"
             )
 
-        # Each persona responds
+        # Phase 1: First 4 personas respond (or all 5 if not adversarial)
         all_responses: list[dict] = []
+        personas_to_run = PHILOSOPHICAL_PERSONAS[:4] if adversarial else PHILOSOPHICAL_PERSONAS
 
-        for idx, persona in enumerate(PHILOSOPHICAL_PERSONAS):
+        for idx, persona in enumerate(personas_to_run):
             backend = get_backend_for_persona(self.tracker, idx)
             model_name = backend.backend_name()
 
@@ -353,6 +397,7 @@ class AutoLoopScheduler:
                 "persona_name": persona["name"],
                 "persona_role": persona["role"],
                 "model": model_name,
+                "is_adversarial": False,
             })
 
             user_prompt = (
@@ -389,10 +434,63 @@ class AutoLoopScheduler:
                 "content": content,
             })
 
+        # Phase 2: Adversarial pass — devil's advocate reads all responses and attacks
+        if adversarial:
+            adversary = PHILOSOPHICAL_PERSONAS[4]  # critical_theorist
+            backend = get_backend_for_persona(self.tracker, 4)
+            model_name = backend.backend_name()
+
+            yield sse_event("phil_persona_start", {
+                "cycle": cycle_num,
+                "persona_id": "adversary",
+                "persona_name": "魔鬼代言人",
+                "persona_role": "对抗性审查",
+                "model": model_name,
+                "is_adversarial": True,
+            })
+
+            # Build adversarial input with all other responses
+            others_text = "\n\n".join(
+                f"【{r['persona_name']}】\n{r['content']}" for r in all_responses
+            )
+            adversarial_user = (
+                f"问题：{question}\n\n"
+                f"以下是四位哲学家的论点，请逐一审查并攻击最薄弱的环节：\n\n"
+                f"{others_text}"
+            )
+
+            full_response: list[str] = []
+            async for chunk in backend.stream(
+                system_prompt=ADVERSARIAL_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": adversarial_user}],
+                max_tokens=800,
+            ):
+                full_response.append(chunk)
+                yield sse_event("phil_persona_chunk", {
+                    "cycle": cycle_num,
+                    "persona_id": "adversary",
+                    "text": chunk,
+                })
+
+            adv_content = "".join(full_response)
+            all_responses.append({
+                "persona_id": "adversary",
+                "persona_name": "魔鬼代言人",
+                "content": adv_content,
+            })
+
+            yield sse_event("phil_persona_complete", {
+                "cycle": cycle_num,
+                "persona_id": "adversary",
+                "persona_name": "魔鬼代言人",
+                "content": adv_content,
+            })
+
         yield sse_event("phil_debate_done", {
             "cycle": cycle_num,
             "n_personas": len(all_responses),
             "debate_session_id": f"phil-{cycle_num}",
+            "adversarial": adversarial,
         })
 
         # Synthesize all perspectives
@@ -404,6 +502,16 @@ class AutoLoopScheduler:
             "cycle": cycle_num,
             "synthesis": synthesis,
         })
+
+        # Feature 1: Extract stance matrix (epistemic divergence map)
+        if extract_stances:
+            stance_matrix = await self._extract_stance_matrix(
+                question, all_responses,
+            )
+            yield sse_event("phil_stance_matrix", {
+                "cycle": cycle_num,
+                "matrix": stance_matrix,
+            })
 
     async def _synthesize_philosophical(
         self,
@@ -440,6 +548,103 @@ class AutoLoopScheduler:
         except Exception as e:
             logger.error(f"Philosophical synthesis failed: {e}")
             return f"[综合失败: {e}]"
+
+    async def _extract_stance_matrix(
+        self,
+        question: str,
+        responses: list[dict],
+    ) -> dict:
+        """Extract a persona × argument stance matrix from debate responses.
+
+        Returns: {
+            "arguments": ["arg1", "arg2", ...],   # 4-6 key arguments/positions
+            "stances": {
+                "persona_id": [score1, score2, ...],  # -1.0 to 1.0
+                ...
+            }
+        }
+        """
+        import json as json_mod
+
+        system = (
+            "你是辩论分析师。从多位哲学家对同一问题的回应中：\n"
+            "1. 提取 4-6 个核心论点/立场（简短标签，10 字以内）\n"
+            "2. 为每位思想家在每个论点上打分：-1.0（强烈反对）到 1.0（强烈支持），0 表示未表态\n\n"
+            "严格输出 JSON：\n"
+            '{"arguments": ["论点1", "论点2", ...], '
+            '"stances": {"persona_id": [score1, score2, ...], ...}}\n\n'
+            "不要输出任何 JSON 以外的内容。"
+        )
+
+        persona_texts = "\n\n".join(
+            f"[{r['persona_id']}] {r['persona_name']}:\n{r['content']}" for r in responses
+        )
+        user = f"问题: {question}\n\n各方回应:\n{persona_texts}"
+
+        try:
+            backend = get_strong_backend(self.tracker)
+            raw = await backend.complete(
+                system, [{"role": "user", "content": user}],
+                max_tokens=800, temperature=0.2,
+            )
+            # Parse JSON from response
+            raw = raw.strip()
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            return json_mod.loads(raw)
+        except Exception as e:
+            logger.error(f"Stance matrix extraction failed: {e}")
+            return {"arguments": [], "stances": {}}
+
+    async def _extract_candidate_questions(
+        self,
+        seed: str,
+        current: str,
+        synthesis: str,
+        chain: list[str],
+    ) -> list[str]:
+        """Extract top-3 candidate sub-questions for branching (Feature 3).
+
+        Returns a list of 3 distinct questions ranked by depth potential.
+        """
+        import json as json_mod
+
+        system = (
+            "你是哲学对话的分支引导者。基于综合分析，提取 3 个最值得深入的子问题。\n"
+            "要求：\n"
+            "1. 三个问题必须指向不同的方向（维度正交）\n"
+            "2. 按探索深度潜力排序（最有潜力的在前）\n"
+            "3. 不要重复已探讨的问题\n"
+            "4. 每个问题用一句话，尖锐且具体\n\n"
+            '严格输出 JSON 数组：["问题1", "问题2", "问题3"]\n'
+            "不要输出任何 JSON 以外的内容。"
+        )
+
+        chain_text = "\n".join(f"  第{i+1}轮: {h}" for i, h in enumerate(chain))
+        user = (
+            f"原始问题: {seed}\n"
+            f"当前问题: {current}\n"
+            f"已探讨问题链:\n{chain_text}\n\n"
+            f"当前轮综合分析:\n{synthesis[:1000]}\n\n"
+            f"请提取 3 个候选子问题："
+        )
+
+        try:
+            backend = get_strong_backend(self.tracker)
+            raw = await backend.complete(
+                system, [{"role": "user", "content": user}],
+                max_tokens=400, temperature=0.5,
+            )
+            raw = raw.strip()
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            candidates = json_mod.loads(raw)
+            if isinstance(candidates, list) and len(candidates) > 0:
+                return [str(c).strip() for c in candidates[:3]]
+            return []
+        except Exception as e:
+            logger.error(f"Failed to extract candidate questions: {e}")
+            return []
 
     async def _extract_next_question(
         self,

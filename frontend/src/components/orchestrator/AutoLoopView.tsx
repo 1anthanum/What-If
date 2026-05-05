@@ -11,6 +11,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useAutoLoopStore, type PhilPersonaState } from '../../store/autoLoopStore';
 import { useCounterfactualStore } from '../../store/counterfactualStore';
 import { EvolutionChain } from './EvolutionChain';
+import { DivergenceHeatmap } from './DivergenceHeatmap';
+import { ForkingTree } from './ForkingTree';
+import { SpectatorPanel } from './SpectatorPanel';
 import type { AutoLoopConfig, AutoLoopMode } from '../../services/api';
 
 const PERSONA_COLORS: Record<string, string> = {
@@ -19,6 +22,7 @@ const PERSONA_COLORS: Record<string, string> = {
   pragmatist: 'text-emerald-400/70 border-emerald-400/20 bg-emerald-400/5',
   eastern_philosopher: 'text-amber-400/70 border-amber-400/20 bg-amber-400/5',
   critical_theorist: 'text-purple-400/70 border-purple-400/20 bg-purple-400/5',
+  adversary: 'text-red-400/70 border-red-400/20 bg-red-400/5',
 };
 
 const PERSONA_ICONS: Record<string, string> = {
@@ -27,6 +31,7 @@ const PERSONA_ICONS: Record<string, string> = {
   pragmatist: '◆',
   eastern_philosopher: '☯',
   critical_theorist: '⚡',
+  adversary: '🗡',
 };
 
 export function AutoLoopView() {
@@ -49,6 +54,9 @@ export function AutoLoopView() {
   const [seedInput, setSeedInput] = useState('');
   const [numCycles, setNumCycles] = useState(5);
   const [configMode, setConfigMode] = useState<AutoLoopMode>('philosophical');
+  const [adversarialEnabled, setAdversarialEnabled] = useState(false);
+  const [stanceEnabled, setStanceEnabled] = useState(false);
+  const [branchingEnabled, setBranchingEnabled] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Elapsed timer
@@ -81,6 +89,9 @@ export function AutoLoopView() {
       max_cycles: numCycles,
       max_iterations_per_loop: 2,
       time_horizon: '30 years',
+      adversarial: configMode === 'philosophical' ? adversarialEnabled : false,
+      extract_stances: configMode === 'philosophical' ? stanceEnabled : false,
+      branching: configMode === 'philosophical' ? branchingEnabled : false,
     };
     store.start(config);
   };
@@ -193,7 +204,7 @@ export function AutoLoopView() {
                       { id: 'existentialist', name: '存在主义' },
                       { id: 'pragmatist', name: '实用主义' },
                       { id: 'eastern_philosopher', name: '东方哲学' },
-                      { id: 'critical_theorist', name: '批判理论' },
+                      { id: adversarialEnabled ? 'adversary' : 'critical_theorist', name: adversarialEnabled ? '魔鬼代言人' : '批判理论' },
                     ].map((p) => (
                       <span
                         key={p.id}
@@ -202,6 +213,38 @@ export function AutoLoopView() {
                         {PERSONA_ICONS[p.id] ?? '◇'} {p.name}
                       </span>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Feature toggles (philosophical mode only) */}
+              {configMode === 'philosophical' && (
+                <div className="bg-deep-700/20 border border-deep-400/8 rounded-lg px-4 py-3 space-y-2">
+                  <span className="text-[9px] font-mono text-deep-200/30 uppercase tracking-wider block">
+                    高级选项
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <FeatureToggle
+                      label="对抗模式"
+                      description="第五位替换为魔鬼代言人，专攻其他论点弱点"
+                      enabled={adversarialEnabled}
+                      onToggle={setAdversarialEnabled}
+                      color="red"
+                    />
+                    <FeatureToggle
+                      label="分歧热力图"
+                      description="每轮提取各模型在核心论点上的立场矩阵"
+                      enabled={stanceEnabled}
+                      onToggle={setStanceEnabled}
+                      color="blue"
+                    />
+                    <FeatureToggle
+                      label="决策分支"
+                      description="每轮提供 3 个候选子问题，展示未探索的分支"
+                      enabled={branchingEnabled}
+                      onToggle={setBranchingEnabled}
+                      color="amber"
+                    />
                   </div>
                 </div>
               )}
@@ -299,14 +342,28 @@ export function AutoLoopView() {
                 </span>
               </div>
 
-              {status === 'running' && (
-                <button
-                  onClick={() => store.cancel()}
-                  className="text-[10px] font-mono text-deep-200/40 hover:text-earth-rust/60 transition-colors px-3 py-1.5 border border-deep-400/15 rounded hover:border-earth-rust/20"
-                >
-                  停止
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {isPhilosophical && (
+                  <button
+                    onClick={() => store.toggleSpectator()}
+                    className={`text-[10px] font-mono transition-colors px-3 py-1.5 border rounded ${
+                      store.spectatorOpen
+                        ? 'text-emerald-400/60 border-emerald-400/20 bg-emerald-400/5'
+                        : 'text-deep-200/40 border-deep-400/15 hover:border-deep-400/25'
+                    }`}
+                  >
+                    观战
+                  </button>
+                )}
+                {status === 'running' && (
+                  <button
+                    onClick={() => store.cancel()}
+                    className="text-[10px] font-mono text-deep-200/40 hover:text-earth-rust/60 transition-colors px-3 py-1.5 border border-deep-400/15 rounded hover:border-earth-rust/20"
+                  >
+                    停止
+                  </button>
+                )}
+              </div>
             </div>
 
             {status === 'running' && (
@@ -333,6 +390,9 @@ export function AutoLoopView() {
               </div>
             )}
           </div>
+
+          {/* Feature 4: Spectator Panel */}
+          {isPhilosophical && store.spectatorOpen && <SpectatorPanel />}
 
           {/* Live Persona Responses (philosophical mode) */}
           {isPhilosophical && activeCycle && activeCycle.personas.length > 0 && (
@@ -365,6 +425,11 @@ export function AutoLoopView() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Live heatmap during running state */}
+          {isPhilosophical && cycles.some((c) => c.stanceMatrix) && (
+            <DivergenceHeatmap cycles={cycles} />
           )}
 
           {/* Evolution Chain */}
@@ -474,6 +539,16 @@ export function AutoLoopView() {
               ))}
             </div>
           </div>
+
+          {/* Feature 1: Epistemic Divergence Heatmap */}
+          {isPhilosophical && cycles.some((c) => c.stanceMatrix) && (
+            <DivergenceHeatmap cycles={cycles} />
+          )}
+
+          {/* Feature 3: Forking Tree */}
+          {isPhilosophical && cycles.some((c) => c.candidateQuestions.length > 0) && (
+            <ForkingTree cycles={cycles} evolutionChain={evolutionChain} />
+          )}
 
           {/* Expandable cycle details for philosophical mode */}
           {isPhilosophical && cycles.length > 0 && (
@@ -612,5 +687,61 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
       <span className="text-sm font-mono text-white/70 block mt-1">{value}</span>
       <span className="text-[8px] font-mono text-deep-200/30 uppercase tracking-wider">{label}</span>
     </div>
+  );
+}
+
+/* ──── Feature Toggle ──── */
+
+function FeatureToggle({
+  label,
+  description,
+  enabled,
+  onToggle,
+  color,
+}: {
+  label: string;
+  description: string;
+  enabled: boolean;
+  onToggle: (v: boolean) => void;
+  color: 'red' | 'blue' | 'amber';
+}) {
+  const colorMap = {
+    red: {
+      on: 'border-red-400/25 bg-red-400/8 text-red-400/70',
+      off: 'border-deep-400/12 bg-deep-700/20 text-deep-200/35',
+      dot: 'bg-red-400/60',
+    },
+    blue: {
+      on: 'border-blue-400/25 bg-blue-400/8 text-blue-400/70',
+      off: 'border-deep-400/12 bg-deep-700/20 text-deep-200/35',
+      dot: 'bg-blue-400/60',
+    },
+    amber: {
+      on: 'border-amber-300/25 bg-amber-300/8 text-amber-300/70',
+      off: 'border-deep-400/12 bg-deep-700/20 text-deep-200/35',
+      dot: 'bg-amber-300/60',
+    },
+  };
+
+  const c = colorMap[color];
+
+  return (
+    <button
+      onClick={() => onToggle(!enabled)}
+      className={`px-3 py-2 rounded-lg border text-left transition-all ${
+        enabled ? c.on : c.off
+      }`}
+      title={description}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full transition-colors ${
+          enabled ? c.dot : 'bg-deep-400/20'
+        }`} />
+        <span className="text-[10px] font-mono">{label}</span>
+      </div>
+      <p className="text-[8px] mt-0.5 opacity-50 leading-tight max-w-[160px]">
+        {description}
+      </p>
+    </button>
   );
 }
