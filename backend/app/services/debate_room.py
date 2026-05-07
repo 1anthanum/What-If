@@ -59,11 +59,22 @@ DOMAIN_PERSONA_MAP: dict[str, list[str]] = {
 class DebateRoomService:
     """Manages debate sessions: creation, rounds, event injection, summaries."""
 
+    # Defaults — match ModelParams schema; used when request omits model_params.
+    DEFAULT_PARAMS = {
+        "persona_temperature": 0.7,
+        "persona_max_tokens": 800,
+        "judge_temperature": 0.4,
+        "judge_max_tokens": 1500,
+        "eval_enabled": True,
+    }
+
     def __init__(self):
         self.tracker = TokenTracker()
         self.claude = ClaudeClient(token_tracker=self.tracker)
         self.prompt_engine = PromptEngine()
         self.sessions: dict[str, DebateSession] = {}
+        # session_id → {persona_temperature, persona_max_tokens, judge_temperature, judge_max_tokens}
+        self.session_params: dict[str, dict] = {}
 
     def start_session(self, request: DebateStartRequest) -> DebateSession:
         """Create a new debate session."""
@@ -92,6 +103,9 @@ class DebateRoomService:
         )
 
         self.sessions[session_id] = session
+        self.session_params[session_id] = (
+            request.model_params.model_dump() if request.model_params else dict(self.DEFAULT_PARAMS)
+        )
         return session
 
     def _resolve_personas(
@@ -175,6 +189,8 @@ class DebateRoomService:
             "injected_event": injected_event,
         })
 
+        params = self.session_params.get(session_id, dict(self.DEFAULT_PARAMS))
+
         # Each persona takes a turn
         for idx, persona in enumerate(session.personas):
             # Select backend for this persona (round-robin from model pool)
@@ -201,7 +217,8 @@ class DebateRoomService:
             async for chunk in backend.stream(
                 system_prompt=persona["system_prompt"],
                 messages=[{"role": "user", "content": user_prompt}],
-                max_tokens=800,
+                max_tokens=params["persona_max_tokens"],
+                temperature=params["persona_temperature"],
             ):
                 full_response.append(chunk)
                 yield sse_event("persona_chunk", {
@@ -233,6 +250,51 @@ class DebateRoomService:
             "token_usage": self.tracker.summary(),
         })
 
+        # ── Per-statement core-takeaway summary (local model, free) ──
+        if current_round.statements:
+            import asyncio as _asyncio
+            from app.services.persona_summary import _summarize_one
+            from app.core.inference import get_summarizer_backend
+
+            yield sse_event("round_summary_start", {"round_number": round_num})
+            summarizer_label = get_summarizer_backend(self.tracker).backend_name()
+
+            async def _tagged(stmt):
+                text = await _summarize_one(stmt.persona_name, stmt.content, self.tracker)
+                return stmt.persona_id, stmt.persona_name, text
+
+            tasks = [_asyncio.create_task(_tagged(s)) for s in current_round.statements]
+            for done in _asyncio.as_completed(tasks):
+                pid, pname, summary_text = await done
+                yield sse_event("persona_summary", {
+                    "round_number": round_num,
+                    "persona_id": pid,
+                    "persona_name": pname,
+                    "summary": summary_text,
+                    "summarizer_model": summarizer_label,
+                })
+
+        # ── Optional: judge-issued per-persona evaluation ──
+        if params.get("eval_enabled", True) and current_round.statements:
+            from app.services.persona_eval import evaluate_round as _eval_round
+            yield sse_event("round_eval_start", {"round_number": round_num})
+            evaluations, judge_model = await _eval_round(
+                scenario_hypothesis=session.scenario_hypothesis,
+                statements=[
+                    {"persona_id": s.persona_id, "persona_name": s.persona_name, "content": s.content}
+                    for s in current_round.statements
+                ],
+                tracker=self.tracker,
+                max_tokens=min(1600, params.get("judge_max_tokens", 1500)),
+                temperature=0.2,
+            )
+            yield sse_event("round_eval", {
+                "round_number": round_num,
+                "evaluations": evaluations,
+                "judge_model": judge_model,
+                "token_usage": self.tracker.summary(),
+            })
+
     def inject_event(self, session_id: str, event_description: str) -> bool:
         """Queue an event to be injected in the next round."""
         session = self.sessions.get(session_id)
@@ -241,11 +303,15 @@ class DebateRoomService:
         session.pending_event = event_description
         return True
 
-    async def generate_summary(self, session_id: str) -> str:
-        """Generate an analyst summary of all debate rounds."""
+    async def generate_summary(self, session_id: str) -> tuple[str, str]:
+        """Generate an analyst summary of all debate rounds.
+
+        Returns (summary_text, judge_model_name) so the UI can show which
+        model produced the synthesis.
+        """
         session = self.sessions.get(session_id)
         if not session or not session.rounds:
-            return "No debate data available."
+            return "No debate data available.", "n/a"
 
         all_rounds_data = []
         for r in session.rounds:
@@ -260,13 +326,17 @@ class DebateRoomService:
             all_rounds=all_rounds_data,
         )
 
-        summary = await self.claude.complete(
+        from app.core.inference import get_strong_backend
+        params = self.session_params.get(session_id, dict(self.DEFAULT_PARAMS))
+        backend = get_strong_backend(self.tracker)
+        summary = await backend.complete(
             system_prompt="你是一位中立、严谨的系统分析师，擅长从多方辩论中提炼关键洞察。",
             messages=[{"role": "user", "content": analyst_prompt}],
-            max_tokens=1500,
+            max_tokens=params["judge_max_tokens"],
+            temperature=params["judge_temperature"],
         )
 
-        return summary
+        return summary, backend.backend_name()
 
     def get_session(self, session_id: str) -> DebateSession | None:
         return self.sessions.get(session_id)

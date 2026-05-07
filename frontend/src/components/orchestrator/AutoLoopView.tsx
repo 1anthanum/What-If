@@ -113,12 +113,12 @@ export function AutoLoopView() {
 
       {/* ══════ CONFIG STATE ══════ */}
       {status === 'idle' && (
-        <div className="glass border border-amber-300/8 rounded-lg p-6 space-y-5 animate-fade-in">
+        <div className="glass border border-amber-300/35 rounded-lg p-6 space-y-5 animate-fade-in">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${
               configMode === 'philosophical'
                 ? 'bg-gradient-to-br from-purple-400/20 to-blue-400/20 border-purple-400/20'
-                : 'bg-gradient-to-br from-amber-300/20 to-amber-600/20 border-amber-300/20'
+                : 'bg-gradient-to-br from-amber-300/20 to-amber-600/20 border-amber-300/55'
             }`}>
               <span className={`text-lg ${configMode === 'philosophical' ? 'text-purple-400/80' : 'text-amber-300/80'}`}>
                 {configMode === 'philosophical' ? '∿' : '∞'}
@@ -126,7 +126,7 @@ export function AutoLoopView() {
             </div>
             <div>
               <h2 className="text-sm font-medium text-white/85">自主探索模式</h2>
-              <p className="text-[10px] text-deep-200/40 leading-relaxed">
+              <p className="text-[14px] text-deep-200/85 leading-relaxed">
                 {configMode === 'philosophical'
                   ? '五个哲学流派持续辩论，每轮提炼核心分歧，自动追问更深层的子问题'
                   : '系统自动循环推演，每轮从结论中提取新假设，持续深入探索因果链'}
@@ -138,20 +138,20 @@ export function AutoLoopView() {
           <div className="flex items-center gap-1 bg-deep-800/30 rounded-md p-0.5 max-w-xs">
             <button
               onClick={() => setConfigMode('philosophical')}
-              className={`flex-1 py-1.5 px-3 rounded text-[10px] font-mono transition-all ${
+              className={`flex-1 py-1.5 px-3 rounded text-[14px] font-mono transition-all ${
                 configMode === 'philosophical'
                   ? 'bg-purple-400/15 text-purple-300/80 border border-purple-400/20'
-                  : 'text-deep-200/35 hover:text-deep-200/60 border border-transparent'
+                  : 'text-deep-200/35 hover:text-deep-200/95 border border-transparent'
               }`}
             >
               哲学对话
             </button>
             <button
               onClick={() => setConfigMode('historical')}
-              className={`flex-1 py-1.5 px-3 rounded text-[10px] font-mono transition-all ${
+              className={`flex-1 py-1.5 px-3 rounded text-[14px] font-mono transition-all ${
                 configMode === 'historical'
-                  ? 'bg-amber-300/15 text-amber-300/80 border border-amber-300/20'
-                  : 'text-deep-200/35 hover:text-deep-200/60 border border-transparent'
+                  ? 'bg-amber-300/15 text-amber-300/80 border border-amber-300/55'
+                  : 'text-deep-200/35 hover:text-deep-200/95 border border-transparent'
               }`}
             >
               历史推演
@@ -160,14 +160,14 @@ export function AutoLoopView() {
 
           {/* Historical mode: event selection */}
           {configMode === 'historical' && !selectedEvent && (
-            <div className="text-xs text-amber-300/50 bg-amber-300/5 border border-amber-300/10 rounded-lg px-4 py-3">
+            <div className="text-xs text-amber-300/90 bg-amber-300/5 border border-amber-300/40 rounded-lg px-4 py-3">
               请先在「历史反事实」标签页中选择一个历史事件。
             </div>
           )}
 
           {configMode === 'historical' && selectedEvent && (
-            <div className="bg-deep-700/30 border border-deep-400/10 rounded-lg px-4 py-3">
-              <span className="text-[9px] font-mono text-deep-200/30 uppercase tracking-wider">选定事件</span>
+            <div className="bg-deep-700/30 border border-deep-400/40 rounded-lg px-4 py-3">
+              <span className="text-[15px] font-mono text-deep-200/75 uppercase tracking-wider">选定事件</span>
               <p className="text-sm text-white/70 mt-1">{selectedEvent.title}</p>
             </div>
           )}
@@ -176,7 +176,7 @@ export function AutoLoopView() {
           {(configMode === 'philosophical' || selectedEvent) && (
             <>
               <div>
-                <label className="text-[10px] font-mono text-deep-200/40 uppercase tracking-wider mb-1.5 block">
+                <label className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider mb-1.5 block">
                   {configMode === 'philosophical' ? '哲学问题 — 对话的起点' : '种子假设 — 探索的起点'}
                 </label>
                 <textarea
@@ -188,14 +188,14 @@ export function AutoLoopView() {
                       : '例如：如果哈伯工艺的合成效率提高了 5 倍...'
                   }
                   rows={3}
-                  className="w-full bg-deep-700/30 border border-deep-400/15 rounded-lg px-4 py-2.5 text-sm text-white/80 placeholder:text-deep-300/25 focus:outline-none focus:border-amber-300/25 resize-none transition-colors"
+                  className="w-full bg-deep-700/30 border border-deep-400/45 rounded-lg px-4 py-2.5 text-sm text-white/80 placeholder:text-deep-300/65 focus:outline-none focus:border-amber-300/25 resize-none transition-colors"
                 />
               </div>
 
               {/* Philosophical mode: persona preview */}
               {configMode === 'philosophical' && (
-                <div className="bg-deep-700/20 border border-deep-400/8 rounded-lg px-4 py-3">
-                  <span className="text-[9px] font-mono text-deep-200/30 uppercase tracking-wider block mb-2">
+                <div className="bg-deep-700/20 border border-deep-400/35 rounded-lg px-4 py-3">
+                  <span className="text-[15px] font-mono text-deep-200/75 uppercase tracking-wider block mb-2">
                     参与辩论的哲学流派
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -208,7 +208,7 @@ export function AutoLoopView() {
                     ].map((p) => (
                       <span
                         key={p.id}
-                        className={`text-[10px] px-2.5 py-1 rounded-md border ${PERSONA_COLORS[p.id] ?? 'text-deep-200/50 border-deep-400/15'}`}
+                        className={`text-[14px] px-2.5 py-1 rounded-md border ${PERSONA_COLORS[p.id] ?? 'text-deep-200/50 border-deep-400/45'}`}
                       >
                         {PERSONA_ICONS[p.id] ?? '◇'} {p.name}
                       </span>
@@ -219,8 +219,8 @@ export function AutoLoopView() {
 
               {/* Feature toggles (philosophical mode only) */}
               {configMode === 'philosophical' && (
-                <div className="bg-deep-700/20 border border-deep-400/8 rounded-lg px-4 py-3 space-y-2">
-                  <span className="text-[9px] font-mono text-deep-200/30 uppercase tracking-wider block">
+                <div className="bg-deep-700/20 border border-deep-400/35 rounded-lg px-4 py-3 space-y-2">
+                  <span className="text-[15px] font-mono text-deep-200/75 uppercase tracking-wider block">
                     高级选项
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -251,7 +251,7 @@ export function AutoLoopView() {
 
               <div className="flex items-end justify-between">
                 <div className="space-y-2">
-                  <label className="text-[9px] font-mono text-deep-200/30 uppercase tracking-wider block">
+                  <label className="text-[15px] font-mono text-deep-200/75 uppercase tracking-wider block">
                     {configMode === 'philosophical' ? '对话轮次' : '探索深度'}
                   </label>
                   <div className="flex items-center gap-3">
@@ -264,13 +264,13 @@ export function AutoLoopView() {
                             ? configMode === 'philosophical'
                               ? 'bg-purple-400/15 text-purple-300/80 border-purple-400/25 shadow-glow-sm'
                               : 'bg-amber-300/15 text-amber-300/80 border-amber-300/25 shadow-glow-sm'
-                            : 'bg-deep-700/30 text-deep-200/40 border-deep-400/15 hover:border-amber-300/15'
+                            : 'bg-deep-700/30 text-deep-200/85 border-deep-400/45 hover:border-amber-300/45'
                         }`}
                       >
                         {n}
                       </button>
                     ))}
-                    <span className="text-[9px] font-mono text-deep-200/25">轮</span>
+                    <span className="text-[15px] font-mono text-deep-200/70">轮</span>
                   </div>
                 </div>
 
@@ -309,8 +309,8 @@ export function AutoLoopView() {
                       ? isPhilosophical ? 'bg-purple-400/80 animate-pulse' : 'bg-amber-300/80 animate-pulse'
                       : 'bg-deep-200/30'
                   }`} />
-                  <span className={`text-[10px] font-mono uppercase tracking-wider ${
-                    isPhilosophical ? 'text-purple-400/60' : 'text-amber-300/60'
+                  <span className={`text-[14px] font-mono uppercase tracking-wider ${
+                    isPhilosophical ? 'text-purple-400/60' : 'text-amber-300/95'
                   }`}>
                     {status === 'running'
                       ? isPhilosophical ? '哲学对话中' : '探索中'
@@ -337,7 +337,7 @@ export function AutoLoopView() {
                     }`}
                   />
                 ))}
-                <span className="text-[9px] font-mono text-deep-200/30 ml-1">
+                <span className="text-[15px] font-mono text-deep-200/75 ml-1">
                   {currentCycle}/{maxCycles}
                 </span>
               </div>
@@ -346,10 +346,10 @@ export function AutoLoopView() {
                 {isPhilosophical && (
                   <button
                     onClick={() => store.toggleSpectator()}
-                    className={`text-[10px] font-mono transition-colors px-3 py-1.5 border rounded ${
+                    className={`text-[14px] font-mono transition-colors px-3 py-1.5 border rounded ${
                       store.spectatorOpen
                         ? 'text-emerald-400/60 border-emerald-400/20 bg-emerald-400/5'
-                        : 'text-deep-200/40 border-deep-400/15 hover:border-deep-400/25'
+                        : 'text-deep-200/85 border-deep-400/45 hover:border-deep-400/25'
                     }`}
                   >
                     观战
@@ -358,7 +358,7 @@ export function AutoLoopView() {
                 {status === 'running' && (
                   <button
                     onClick={() => store.cancel()}
-                    className="text-[10px] font-mono text-deep-200/40 hover:text-earth-rust/60 transition-colors px-3 py-1.5 border border-deep-400/15 rounded hover:border-earth-rust/20"
+                    className="text-[14px] font-mono text-deep-200/85 hover:text-earth-rust/60 transition-colors px-3 py-1.5 border border-deep-400/45 rounded hover:border-earth-rust/20"
                   >
                     停止
                   </button>
@@ -397,7 +397,7 @@ export function AutoLoopView() {
           {/* Live Persona Responses (philosophical mode) */}
           {isPhilosophical && activeCycle && activeCycle.personas.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-[10px] font-mono text-purple-400/40 uppercase tracking-wider">
+              <h3 className="text-[14px] font-mono text-purple-400/40 uppercase tracking-wider">
                 第 {activeCycle.cycle} 轮辩论
               </h3>
               <div className="grid gap-3">
@@ -413,12 +413,12 @@ export function AutoLoopView() {
                 <div className="glass border border-purple-400/10 rounded-lg p-4 animate-fade-in">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="w-2 h-2 rounded-full bg-purple-400/60 animate-pulse" />
-                    <span className="text-[10px] font-mono text-purple-400/50 uppercase tracking-wider">
+                    <span className="text-[14px] font-mono text-purple-400/50 uppercase tracking-wider">
                       综合分析中...
                     </span>
                   </div>
                   {activeCycle.synthesisPreview && (
-                    <p className="text-[11px] text-deep-100/60 leading-relaxed whitespace-pre-wrap">
+                    <p className="text-[15px] text-deep-100/95 leading-relaxed whitespace-pre-wrap">
                       {activeCycle.synthesisPreview}
                     </p>
                   )}
@@ -442,7 +442,7 @@ export function AutoLoopView() {
         <div className="glass border border-earth-rust/20 rounded-lg p-5 space-y-3 animate-fade-in">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-earth-rust/60" />
-            <span className="text-[10px] font-mono text-earth-rust/60 uppercase tracking-wider">
+            <span className="text-[14px] font-mono text-earth-rust/60 uppercase tracking-wider">
               探索中断
             </span>
           </div>
@@ -450,7 +450,7 @@ export function AutoLoopView() {
           {cycles.length > 0 && <EvolutionChain />}
           <button
             onClick={() => store.reset()}
-            className="text-[10px] font-mono text-amber-300/50 hover:text-amber-300 transition-colors"
+            className="text-[14px] font-mono text-amber-300/90 hover:text-amber-300 transition-colors"
           >
             重新开始
           </button>
@@ -476,7 +476,7 @@ export function AutoLoopView() {
                   <h2 className="text-sm font-medium text-white/85">
                     {isPhilosophical ? '哲学对话完成' : '探索完成'}
                   </h2>
-                  <p className="text-[10px] font-mono text-deep-200/30 mt-0.5">
+                  <p className="text-[14px] font-mono text-deep-200/75 mt-0.5">
                     {cycles.length} 轮{isPhilosophical ? '辩论' : '演化'} · {formatTime(elapsedSeconds)} ·{' '}
                     {stoppedReason === 'converged' ? '已收敛' : '达到上限'}
                   </p>
@@ -484,7 +484,7 @@ export function AutoLoopView() {
               </div>
               <button
                 onClick={() => store.reset()}
-                className="text-[10px] font-mono text-deep-200/40 hover:text-amber-300/70 transition-colors px-3 py-1.5 border border-deep-400/15 rounded hover:border-amber-300/20"
+                className="text-[14px] font-mono text-deep-200/85 hover:text-amber-300/70 transition-colors px-3 py-1.5 border border-deep-400/45 rounded hover:border-amber-300/55"
               >
                 新对话
               </button>
@@ -510,27 +510,27 @@ export function AutoLoopView() {
           </div>
 
           {/* Hypothesis/Question evolution summary */}
-          <div className="glass border border-deep-400/8 rounded-lg p-5">
-            <h3 className="text-[10px] font-mono text-amber-300/50 uppercase tracking-wider mb-3">
+          <div className="glass border border-deep-400/35 rounded-lg p-5">
+            <h3 className="text-[14px] font-mono text-amber-300/90 uppercase tracking-wider mb-3">
               {isPhilosophical ? '问题演化路径' : '假设演化路径'}
             </h3>
             <div className="space-y-2">
               {evolutionChain.map((hypo, idx) => (
                 <div key={idx} className="flex items-start gap-3">
-                  <span className={`text-[9px] font-mono font-bold mt-1 shrink-0 w-6 h-6 rounded-full flex items-center justify-center border ${
+                  <span className={`text-[15px] font-mono font-bold mt-1 shrink-0 w-6 h-6 rounded-full flex items-center justify-center border ${
                     idx === 0
                       ? isPhilosophical
                         ? 'border-purple-400/30 bg-purple-400/10 text-purple-400/60'
-                        : 'border-amber-300/30 bg-amber-300/10 text-amber-300/60'
+                        : 'border-amber-300/70 bg-amber-300/10 text-amber-300/95'
                       : idx === evolutionChain.length - 1
                         ? 'border-earth-green/30 bg-earth-green/10 text-earth-green/60'
-                        : 'border-deep-400/15 bg-deep-600/20 text-deep-200/40'
+                        : 'border-deep-400/45 bg-deep-600/20 text-deep-200/85'
                   }`}>
                     {idx === 0 ? '◈' : idx + 1}
                   </span>
-                  <p className={`text-[11px] leading-relaxed pt-0.5 ${
+                  <p className={`text-[15px] leading-relaxed pt-0.5 ${
                     idx === 0
-                      ? isPhilosophical ? 'text-purple-400/60' : 'text-amber-300/60'
+                      ? isPhilosophical ? 'text-purple-400/60' : 'text-amber-300/95'
                       : 'text-deep-200/50'
                   }`}>
                     {hypo}
@@ -553,7 +553,7 @@ export function AutoLoopView() {
           {/* Expandable cycle details for philosophical mode */}
           {isPhilosophical && cycles.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-[10px] font-mono text-deep-200/40 uppercase tracking-wider">
+              <h3 className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider">
                 辩论详情
               </h3>
               {cycles.map((c) => (
@@ -572,29 +572,29 @@ export function AutoLoopView() {
 /* ──── Persona Card (live streaming during philosophical debate) ──── */
 
 function PersonaCard({ persona, isActive }: { persona: PhilPersonaState; isActive: boolean }) {
-  const colorClass = PERSONA_COLORS[persona.id] ?? 'text-deep-200/50 border-deep-400/15 bg-deep-600/5';
+  const colorClass = PERSONA_COLORS[persona.id] ?? 'text-deep-200/50 border-deep-400/45 bg-deep-600/5';
   const icon = PERSONA_ICONS[persona.id] ?? '◇';
 
   return (
     <div className={`glass border rounded-lg p-4 transition-all duration-300 ${
-      isActive ? `${colorClass} shadow-glow-sm` : 'border-deep-400/8'
+      isActive ? `${colorClass} shadow-glow-sm` : 'border-deep-400/35'
     }`}>
       <div className="flex items-center gap-2 mb-2">
         <span className={`text-sm ${isActive ? '' : 'opacity-50'}`}>{icon}</span>
-        <span className={`text-[10px] font-mono font-medium ${isActive ? '' : 'text-deep-200/40'}`}>
+        <span className={`text-[14px] font-mono font-medium ${isActive ? '' : 'text-deep-200/85'}`}>
           {persona.name}
         </span>
-        <span className="text-[8px] font-mono text-deep-200/20">{persona.model}</span>
+        <span className="text-[14px] font-mono text-deep-200/65">{persona.model}</span>
         {persona.streaming && (
           <span className="ml-auto w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
         )}
         {!persona.streaming && persona.content && (
-          <span className="ml-auto text-[8px] font-mono text-deep-200/20">✓</span>
+          <span className="ml-auto text-[14px] font-mono text-deep-200/65">✓</span>
         )}
       </div>
       {persona.content && (
-        <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${
-          isActive ? 'text-deep-100/70' : 'text-deep-200/40'
+        <p className={`text-[15px] leading-relaxed whitespace-pre-wrap ${
+          isActive ? 'text-deep-100/70' : 'text-deep-200/85'
         }`}>
           {persona.content}
           {persona.streaming && <span className="cursor-blink" />}
@@ -612,40 +612,40 @@ function CycleDetail({ cycle }: { cycle: import('../../store/autoLoopStore').Cyc
   return (
     <button
       onClick={() => setExpanded(!expanded)}
-      className="w-full text-left glass border border-deep-400/8 hover:border-purple-400/15 rounded-lg p-4 transition-all duration-300"
+      className="w-full text-left glass border border-deep-400/35 hover:border-purple-400/15 rounded-lg p-4 transition-all duration-300"
     >
       <div className="flex items-center gap-3 mb-1">
-        <span className="text-[9px] font-mono font-bold text-purple-400/60 bg-purple-400/10 border border-purple-400/15 rounded-full w-6 h-6 flex items-center justify-center shrink-0">
+        <span className="text-[15px] font-mono font-bold text-purple-400/60 bg-purple-400/10 border border-purple-400/15 rounded-full w-6 h-6 flex items-center justify-center shrink-0">
           {cycle.cycle}
         </span>
-        <p className="text-[11px] text-white/65 flex-1 leading-relaxed truncate">
+        <p className="text-[15px] text-white/65 flex-1 leading-relaxed truncate">
           {cycle.hypothesis}
         </p>
-        <span className="text-[9px] text-deep-200/30 shrink-0">
+        <span className="text-[15px] text-deep-200/75 shrink-0">
           {expanded ? '▼' : '▶'}
         </span>
       </div>
 
       {!expanded && cycle.synthesisPreview && (
-        <p className="text-[10px] text-deep-200/35 pl-9 line-clamp-2">
+        <p className="text-[14px] text-deep-200/35 pl-9 line-clamp-2">
           {cycle.synthesisPreview.slice(0, 150)}...
         </p>
       )}
 
       {expanded && (
-        <div className="mt-3 pt-3 border-t border-deep-400/8 space-y-3 pl-9">
+        <div className="mt-3 pt-3 border-t border-deep-400/35 space-y-3 pl-9">
           {cycle.personas.map((p) => (
             <div key={p.id} className="space-y-1">
               <div className="flex items-center gap-1.5">
-                <span className={`text-[10px] ${PERSONA_COLORS[p.id]?.split(' ')[0] ?? 'text-deep-200/50'}`}>
+                <span className={`text-[14px] ${PERSONA_COLORS[p.id]?.split(' ')[0] ?? 'text-deep-200/50'}`}>
                   {PERSONA_ICONS[p.id] ?? '◇'}
                 </span>
-                <span className="text-[9px] font-mono text-deep-200/40">
+                <span className="text-[15px] font-mono text-deep-200/85">
                   {p.name}
                 </span>
-                <span className="text-[8px] font-mono text-deep-200/20">{p.model}</span>
+                <span className="text-[14px] font-mono text-deep-200/65">{p.model}</span>
               </div>
-              <p className="text-[10px] text-deep-200/45 leading-relaxed whitespace-pre-wrap">
+              <p className="text-[14px] text-deep-200/45 leading-relaxed whitespace-pre-wrap">
                 {p.content}
               </p>
             </div>
@@ -653,21 +653,21 @@ function CycleDetail({ cycle }: { cycle: import('../../store/autoLoopStore').Cyc
 
           {cycle.synthesisPreview && (
             <div className="bg-deep-700/20 border border-purple-400/10 rounded px-3 py-2">
-              <span className="text-[8px] font-mono text-purple-400/30 uppercase block mb-1">
+              <span className="text-[14px] font-mono text-purple-400/30 uppercase block mb-1">
                 综合分析
               </span>
-              <p className="text-[10px] text-deep-100/55 leading-relaxed whitespace-pre-wrap">
+              <p className="text-[14px] text-deep-100/55 leading-relaxed whitespace-pre-wrap">
                 {cycle.synthesisPreview}
               </p>
             </div>
           )}
 
           {cycle.nextHypothesis && (
-            <div className="bg-deep-700/20 border border-deep-400/8 rounded px-3 py-2">
-              <span className="text-[8px] font-mono text-amber-300/30 uppercase block mb-1">
+            <div className="bg-deep-700/20 border border-deep-400/35 rounded px-3 py-2">
+              <span className="text-[14px] font-mono text-amber-300/75 uppercase block mb-1">
                 下一轮问题
               </span>
-              <p className="text-[10px] text-amber-300/50 leading-relaxed">
+              <p className="text-[14px] text-amber-300/90 leading-relaxed">
                 {cycle.nextHypothesis}
               </p>
             </div>
@@ -682,10 +682,10 @@ function CycleDetail({ cycle }: { cycle: import('../../store/autoLoopStore').Cyc
 
 function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="bg-deep-700/20 border border-deep-400/8 rounded-lg px-3 py-3 text-center">
-      <span className="text-amber-300/30 text-sm block">{icon}</span>
+    <div className="bg-deep-700/20 border border-deep-400/35 rounded-lg px-3 py-3 text-center">
+      <span className="text-amber-300/75 text-sm block">{icon}</span>
       <span className="text-sm font-mono text-white/70 block mt-1">{value}</span>
-      <span className="text-[8px] font-mono text-deep-200/30 uppercase tracking-wider">{label}</span>
+      <span className="text-[14px] font-mono text-deep-200/75 uppercase tracking-wider">{label}</span>
     </div>
   );
 }
@@ -737,9 +737,9 @@ function FeatureToggle({
         <span className={`w-1.5 h-1.5 rounded-full transition-colors ${
           enabled ? c.dot : 'bg-deep-400/20'
         }`} />
-        <span className="text-[10px] font-mono">{label}</span>
+        <span className="text-[14px] font-mono">{label}</span>
       </div>
-      <p className="text-[8px] mt-0.5 opacity-50 leading-tight max-w-[160px]">
+      <p className="text-[14px] mt-0.5 opacity-50 leading-tight max-w-[160px]">
         {description}
       </p>
     </button>

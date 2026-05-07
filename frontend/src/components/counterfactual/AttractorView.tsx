@@ -42,12 +42,12 @@ export function AttractorView() {
     <div className="space-y-6">
       {/* Input Section */}
       {attractorStatus === 'idle' && !attractorAnalysis && (
-        <div className="glass border border-amber-300/8 rounded-lg p-5 space-y-4">
+        <div className="glass border border-amber-300/35 rounded-lg p-5 space-y-4">
           <div>
-            <h3 className="text-xs font-mono text-amber-300/50 uppercase tracking-wider mb-1">
+            <h3 className="text-xs font-mono text-amber-300/90 uppercase tracking-wider mb-1">
               吸引子检测
             </h3>
-            <p className="text-[10px] text-deep-200/35 leading-relaxed">
+            <p className="text-[14px] text-deep-200/35 leading-relaxed">
               输入 2-5 个不同的反事实假设。系统将对每个假设运行 Ensemble 探索，
               然后分析哪些历史结局无论假设怎么变都会出现——这些就是历史的"吸引子"。
             </p>
@@ -59,17 +59,17 @@ export function AttractorView() {
               {attractorModifications.map((mod, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center gap-2 bg-deep-700/30 border border-deep-400/10 rounded-lg px-3 py-2"
+                  className="flex items-center gap-2 bg-deep-700/30 border border-deep-400/40 rounded-lg px-3 py-2"
                 >
-                  <span className="text-[9px] font-mono text-amber-300/40 bg-amber-300/10 rounded w-5 h-5 flex items-center justify-center shrink-0">
+                  <span className="text-[15px] font-mono text-amber-300/85 bg-amber-300/10 rounded w-5 h-5 flex items-center justify-center shrink-0">
                     {idx + 1}
                   </span>
-                  <span className="text-[11px] text-white/70 flex-1 leading-snug">
+                  <span className="text-[15px] text-white/70 flex-1 leading-snug">
                     {mod}
                   </span>
                   <button
                     onClick={() => removeModification(idx)}
-                    className="text-[9px] text-earth-rust/40 hover:text-earth-rust/70 transition-colors shrink-0"
+                    className="text-[15px] text-earth-rust/40 hover:text-earth-rust/70 transition-colors shrink-0"
                   >
                     ✕
                   </button>
@@ -87,12 +87,12 @@ export function AttractorView() {
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addModification()}
                 placeholder={`输入第 ${attractorModifications.length + 1} 个反事实假设...`}
-                className="flex-1 bg-deep-700/30 border border-deep-400/15 rounded-lg px-4 py-2.5 text-sm text-white/80 placeholder:text-deep-300/25 focus:outline-none focus:border-amber-300/25"
+                className="flex-1 bg-deep-700/30 border border-deep-400/45 rounded-lg px-4 py-2.5 text-sm text-white/80 placeholder:text-deep-300/65 focus:outline-none focus:border-amber-300/25"
               />
               <button
                 onClick={addModification}
                 disabled={!inputText.trim()}
-                className="px-3 py-2.5 text-[10px] font-mono text-amber-300/70 border border-amber-300/20 rounded-lg hover:bg-amber-300/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                className="px-3 py-2.5 text-[14px] font-mono text-amber-300/70 border border-amber-300/55 rounded-lg hover:bg-amber-300/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
                 添加
               </button>
@@ -105,7 +105,7 @@ export function AttractorView() {
               onClick={() => {
                 store.setAttractorModifications([selectedEvent.default_modification]);
               }}
-              className="text-[10px] text-amber-300/30 hover:text-amber-300/60 transition-colors font-mono"
+              className="text-[14px] text-amber-300/75 hover:text-amber-300/95 transition-colors font-mono"
             >
               使用推荐假设作为起点 →
             </button>
@@ -113,7 +113,7 @@ export function AttractorView() {
 
           {/* Start button */}
           <div className="flex items-center justify-between pt-2">
-            <span className="text-[9px] font-mono text-deep-200/25">
+            <span className="text-[15px] font-mono text-deep-200/70">
               {attractorModifications.length}/5 个假设 · 成本约 $0.30-$0.60
             </span>
             <button
@@ -129,12 +129,12 @@ export function AttractorView() {
 
       {/* Running Progress */}
       {isRunning && (
-        <div className="glass border border-amber-300/10 rounded-lg p-6 space-y-4">
+        <div className="glass border border-amber-300/40 rounded-lg p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-mono text-amber-300/60 uppercase tracking-wider">
+            <h3 className="text-xs font-mono text-amber-300/95 uppercase tracking-wider">
               吸引子检测
             </h3>
-            <span className="text-[10px] font-mono text-deep-200/40">
+            <span className="text-[14px] font-mono text-deep-200/85">
               {attractorStatus === 'exploring'
                 ? `探索中 ${attractorProgress.current}/${attractorProgress.total}`
                 : '跨 Fan 分析中...'}
@@ -159,36 +159,36 @@ export function AttractorView() {
           {/* Steps */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-mono font-bold border transition-all ${
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[14px] font-mono font-bold border transition-all ${
                 attractorStatus === 'exploring'
                   ? 'border-amber-300/50 bg-amber-300/15 text-amber-300/90 shadow-glow-sm'
-                  : 'border-amber-300/30 bg-amber-300/10 text-amber-300/60'
+                  : 'border-amber-300/70 bg-amber-300/10 text-amber-300/95'
               }`}>
                 {attractorStatus === 'analyzing' ? '✓' : '1'}
               </div>
-              <span className={`text-[9px] font-mono ${
-                attractorStatus === 'exploring' ? 'text-amber-300/70' : 'text-deep-200/40'
+              <span className={`text-[15px] font-mono ${
+                attractorStatus === 'exploring' ? 'text-amber-300/70' : 'text-deep-200/85'
               }`}>
                 多假设 Ensemble 探索
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-mono font-bold border transition-all ${
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[14px] font-mono font-bold border transition-all ${
                 attractorStatus === 'analyzing'
                   ? 'border-amber-300/50 bg-amber-300/15 text-amber-300/90 shadow-glow-sm'
-                  : 'border-deep-400/20 bg-deep-700/30 text-deep-200/30'
+                  : 'border-deep-400/45 bg-deep-700/30 text-deep-200/75'
               }`}>
                 2
               </div>
-              <span className={`text-[9px] font-mono ${
-                attractorStatus === 'analyzing' ? 'text-amber-300/70' : 'text-deep-200/20'
+              <span className={`text-[15px] font-mono ${
+                attractorStatus === 'analyzing' ? 'text-amber-300/70' : 'text-deep-200/65'
               }`}>
                 跨 Fan 收敛分析
               </span>
             </div>
           </div>
 
-          <p className="text-[10px] text-deep-200/30 font-mono">
+          <p className="text-[14px] text-deep-200/75 font-mono">
             {attractorStatus === 'exploring' && '正在对每个假设运行 Ensemble 可能性探索...'}
             {attractorStatus === 'analyzing' && '正在分析所有探索结果，寻找跨假设的收敛结局...'}
           </p>
@@ -201,7 +201,7 @@ export function AttractorView() {
           <p className="text-xs text-earth-rust/70">{error}</p>
           <button
             onClick={() => store.detectAttractors()}
-            className="mt-2 text-[10px] font-mono text-amber-300/50 hover:text-amber-300 transition-colors"
+            className="mt-2 text-[14px] font-mono text-amber-300/90 hover:text-amber-300 transition-colors"
           >
             重试
           </button>
@@ -217,7 +217,7 @@ export function AttractorView() {
               <h3 className="text-sm font-medium text-white/85">
                 吸引子分析结果
               </h3>
-              <p className="text-[10px] font-mono text-deep-200/30 mt-0.5">
+              <p className="text-[14px] font-mono text-deep-200/75 mt-0.5">
                 {attractorAnalysis.modifications_tested.length} 个假设 ·{' '}
                 {attractorAnalysis.attractors.length} 个吸引子 ·{' '}
                 {attractorAnalysis.divergent_outcomes.length} 个独特结局
@@ -225,22 +225,22 @@ export function AttractorView() {
             </div>
             <button
               onClick={() => store.clearAttractors()}
-              className="text-[10px] font-mono text-deep-200/40 hover:text-amber-300/70 transition-colors px-2 py-1 border border-deep-400/15 rounded hover:border-amber-300/20"
+              className="text-[14px] font-mono text-deep-200/85 hover:text-amber-300/70 transition-colors px-2 py-1 border border-deep-400/45 rounded hover:border-amber-300/55"
             >
               重新检测
             </button>
           </div>
 
           {/* Tested modifications */}
-          <div className="glass border border-deep-400/8 rounded-lg p-4">
-            <h4 className="text-[10px] font-mono text-deep-200/40 uppercase tracking-wider mb-2">
+          <div className="glass border border-deep-400/35 rounded-lg p-4">
+            <h4 className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider mb-2">
               测试的假设
             </h4>
             <div className="flex flex-wrap gap-2">
               {attractorAnalysis.modifications_tested.map((mod, idx) => (
                 <span
                   key={idx}
-                  className="text-[10px] bg-deep-600/30 border border-deep-400/10 rounded-full px-3 py-1 text-deep-200/50"
+                  className="text-[14px] bg-deep-600/30 border border-deep-400/40 rounded-full px-3 py-1 text-deep-200/50"
                 >
                   {mod}
                 </span>
@@ -250,7 +250,7 @@ export function AttractorView() {
 
           {/* Attractor cards */}
           <div className="space-y-3">
-            <h4 className="text-[10px] font-mono text-amber-300/50 uppercase tracking-wider">
+            <h4 className="text-[14px] font-mono text-amber-300/90 uppercase tracking-wider">
               历史吸引子（收敛结局）
             </h4>
             {attractorAnalysis.attractors
@@ -262,14 +262,14 @@ export function AttractorView() {
 
           {/* Divergent outcomes */}
           {attractorAnalysis.divergent_outcomes.length > 0 && (
-            <div className="glass border border-deep-400/8 rounded-lg p-4 space-y-2">
-              <h4 className="text-[10px] font-mono text-deep-200/40 uppercase tracking-wider">
+            <div className="glass border border-deep-400/35 rounded-lg p-4 space-y-2">
+              <h4 className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider">
                 独特结局（仅出现在单一假设下）
               </h4>
               {attractorAnalysis.divergent_outcomes.map((outcome, idx) => (
                 <p
                   key={idx}
-                  className="text-[11px] text-deep-200/50 leading-relaxed pl-3 border-l border-deep-400/15"
+                  className="text-[15px] text-deep-200/50 leading-relaxed pl-3 border-l border-deep-400/45"
                 >
                   {outcome}
                 </p>
@@ -279,14 +279,14 @@ export function AttractorView() {
 
           {/* Methodology */}
           {attractorAnalysis.methodology && (
-            <div className="text-[9px] text-deep-200/25 font-mono bg-deep-700/20 rounded px-3 py-2 border border-deep-400/8 leading-relaxed">
+            <div className="text-[15px] text-deep-200/70 font-mono bg-deep-700/20 rounded px-3 py-2 border border-deep-400/35 leading-relaxed">
               {attractorAnalysis.methodology}
             </div>
           )}
 
           {/* Cost */}
           {tokenUsage && (
-            <div className="text-[9px] font-mono text-deep-200/25 text-right">
+            <div className="text-[15px] font-mono text-deep-200/70 text-right">
               成本: ${tokenUsage.estimated_cost_usd.toFixed(4)} ·{' '}
               {tokenUsage.total_api_calls} 次 API 调用
             </div>
@@ -325,17 +325,17 @@ function AttractorCard({ attractor, rank }: AttractorCardProps) {
   return (
     <button
       onClick={() => setExpanded(!expanded)}
-      className="w-full text-left glass border border-deep-400/8 hover:border-amber-300/15 rounded-lg p-4 transition-all duration-300 hover:bg-amber-300/[0.02] group"
+      className="w-full text-left glass border border-deep-400/35 hover:border-amber-300/45 rounded-lg p-4 transition-all duration-300 hover:bg-amber-300/[0.02] group"
     >
       <div className="flex items-start gap-3">
         {/* Rank badge */}
-        <span className="text-[9px] font-mono font-bold text-amber-300/60 bg-amber-300/10 border border-amber-300/15 rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
+        <span className="text-[15px] font-mono font-bold text-amber-300/95 bg-amber-300/10 border border-amber-300/45 rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
           {rank}
         </span>
 
         <div className="flex-1 min-w-0 space-y-2">
           {/* Description */}
-          <p className="text-[11px] text-white/75 leading-relaxed">
+          <p className="text-[15px] text-white/75 leading-relaxed">
             {attractor.outcome_description}
           </p>
 
@@ -347,13 +347,13 @@ function AttractorCard({ attractor, rank }: AttractorCardProps) {
                 style={{ width: `${convergencePct}%` }}
               />
             </div>
-            <span className="text-[9px] font-mono text-amber-300/60 w-10 text-right">
+            <span className="text-[15px] font-mono text-amber-300/95 w-10 text-right">
               {convergencePct}%
             </span>
           </div>
 
           {/* Metadata row */}
-          <div className="flex items-center gap-4 text-[9px] font-mono text-deep-200/30">
+          <div className="flex items-center gap-4 text-[15px] font-mono text-deep-200/75">
             <span>
               {attractor.contributing_fan_count} 个假设收敛
             </span>
@@ -369,16 +369,16 @@ function AttractorCard({ attractor, rank }: AttractorCardProps) {
 
           {/* Expanded details */}
           {expanded && (
-            <div className="mt-3 pt-3 border-t border-deep-400/8 space-y-2">
-              <div className="flex items-center justify-between text-[9px] font-mono">
+            <div className="mt-3 pt-3 border-t border-deep-400/35 space-y-2">
+              <div className="flex items-center justify-between text-[15px] font-mono">
                 <span className="text-deep-200/35">收敛强度</span>
-                <span className="text-amber-300/50">{convergencePct}%</span>
+                <span className="text-amber-300/90">{convergencePct}%</span>
               </div>
-              <div className="flex items-center justify-between text-[9px] font-mono">
+              <div className="flex items-center justify-between text-[15px] font-mono">
                 <span className="text-deep-200/35">抗干预程度</span>
-                <span className="text-amber-300/50">{resistancePct}%</span>
+                <span className="text-amber-300/90">{resistancePct}%</span>
               </div>
-              <p className="text-[10px] text-deep-200/30 italic leading-relaxed">
+              <p className="text-[14px] text-deep-200/75 italic leading-relaxed">
                 该结局在 {attractor.contributing_fan_count} 个不同假设的探索中反复出现，
                 表明它具有较{attractor.resistance_to_change > 0.7 ? '强' : '弱'}的历史惯性。
                 {attractor.resistance_to_change > 0.7

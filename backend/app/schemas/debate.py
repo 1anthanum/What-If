@@ -11,8 +11,30 @@ class PersonaConfig(BaseModel):
     custom_prompt: str = Field("", description="Custom system prompt (if id='custom')")
 
 
+class ModelParams(BaseModel):
+    """Per-session inference knobs the user can tune from the UI."""
+    persona_temperature: float = Field(0.7, ge=0.0, le=2.0)
+    persona_max_tokens: int = Field(800, ge=100, le=4000)
+    judge_temperature: float = Field(0.4, ge=0.0, le=1.5)
+    judge_max_tokens: int = Field(1500, ge=200, le=8000)
+    eval_enabled: bool = Field(True, description="After each round, judge auto-rates personas on 5 dims")
+
+
+class PersonaEval(BaseModel):
+    """Judge-issued evaluation of a single persona statement."""
+    persona_id: str
+    confidence: int = Field(..., ge=0, le=100)
+    stance: int = Field(..., ge=-100, le=100)
+    novelty: int = Field(..., ge=0, le=100)
+    risk: int = Field(..., ge=0, le=100)
+    style: str  # 经验主义 / 理论推演 / 直觉判断 / 对抗反驳 / 整合调和
+    rationale: str = ""
+
+
 class DebateStartRequest(BaseModel):
     """Request to start a new debate session."""
+    model_config = {"protected_namespaces": ()}
+
     scenario_title: str
     scenario_hypothesis: str
     domain: str = "general"
@@ -24,6 +46,7 @@ class DebateStartRequest(BaseModel):
         description="Persona configs. Empty = auto-select based on scenario."
     )
     language: str = Field("zh", description="Response language: zh, en")
+    model_params: ModelParams | None = None
 
 
 class EventInjection(BaseModel):

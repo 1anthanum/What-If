@@ -37,8 +37,8 @@ export function EvolutionChain() {
       {/* Seed hypothesis (root) */}
       <div className="relative pl-14 pb-6">
         <NodeDot type="seed" active={currentCycle <= 1 && status === 'running'} />
-        <div className="glass border border-amber-300/15 rounded-lg p-4">
-          <span className="text-[8px] font-mono text-amber-300/40 uppercase tracking-widest">
+        <div className="glass border border-amber-300/45 rounded-lg p-4">
+          <span className="text-[14px] font-mono text-amber-300/85 uppercase tracking-widest">
             种子假设
           </span>
           <p className="text-xs text-white/70 mt-1 leading-relaxed">
@@ -62,7 +62,7 @@ export function EvolutionChain() {
       {status === 'complete' && (
         <div className="relative pl-14 pt-2">
           <NodeDot type="terminal" active={false} />
-          <div className="text-[9px] font-mono text-amber-300/40 flex items-center gap-2">
+          <div className="text-[15px] font-mono text-amber-300/85 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-earth-green/50" />
             探索完成
           </div>
@@ -104,16 +104,16 @@ function CycleNode({
         onClick={() => setExpanded(!expanded)}
         className={`w-full text-left rounded-lg p-4 transition-all duration-500 ${
           isActive
-            ? 'glass border border-amber-300/20 shadow-glow-sm'
-            : 'glass border border-deep-400/8 hover:border-amber-300/10'
+            ? 'glass border border-amber-300/55 shadow-glow-sm'
+            : 'glass border border-deep-400/35 hover:border-amber-300/40'
         }`}
       >
         {/* Header */}
         <div className="flex items-center gap-3 mb-1">
-          <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border transition-all ${
+          <span className={`text-[15px] font-mono font-bold px-2 py-0.5 rounded-full border transition-all ${
             isActive
               ? 'bg-amber-300/15 text-amber-300/80 border-amber-300/25'
-              : 'bg-deep-600/30 text-deep-200/40 border-deep-400/15'
+              : 'bg-deep-600/30 text-deep-200/85 border-deep-400/45'
           }`}>
             C{cycle.cycle}
           </span>
@@ -124,13 +124,13 @@ function CycleNode({
           )}
 
           <div className="flex-1" />
-          <span className="text-[9px] text-deep-200/25">
+          <span className="text-[15px] text-deep-200/70">
             {expanded ? '▾' : '▸'}
           </span>
         </div>
 
         {/* Hypothesis */}
-        <p className={`text-[11px] leading-relaxed transition-colors ${
+        <p className={`text-[15px] leading-relaxed transition-colors ${
           isActive ? 'text-white/70' : 'text-deep-200/50'
         }`}>
           {cycle.hypothesis.length > 120 && !expanded
@@ -141,26 +141,26 @@ function CycleNode({
 
         {/* Expanded content */}
         {expanded && cycle.synthesisPreview && (
-          <div className="mt-3 pt-3 border-t border-deep-400/8 space-y-3 animate-fade-in">
+          <div className="mt-3 pt-3 border-t border-deep-400/35 space-y-3 animate-fade-in">
             {/* Synthesis */}
             <div>
-              <span className="text-[8px] font-mono text-amber-300/30 uppercase tracking-wider">
+              <span className="text-[14px] font-mono text-amber-300/75 uppercase tracking-wider">
                 综合结论
               </span>
-              <p className="text-[10px] text-deep-200/45 leading-relaxed mt-1">
+              <p className="text-[14px] text-deep-200/45 leading-relaxed mt-1">
                 {cycle.synthesisPreview}
               </p>
             </div>
 
             {/* Next hypothesis arrow */}
             {cycle.nextHypothesis && (
-              <div className="flex items-start gap-2 bg-amber-300/5 border border-amber-300/10 rounded px-3 py-2">
-                <span className="text-amber-300/40 text-xs mt-0.5">→</span>
+              <div className="flex items-start gap-2 bg-amber-300/5 border border-amber-300/40 rounded px-3 py-2">
+                <span className="text-amber-300/85 text-xs mt-0.5">→</span>
                 <div>
-                  <span className="text-[8px] font-mono text-amber-300/30 uppercase tracking-wider">
+                  <span className="text-[14px] font-mono text-amber-300/75 uppercase tracking-wider">
                     演化方向
                   </span>
-                  <p className="text-[10px] text-amber-300/50 leading-relaxed mt-0.5">
+                  <p className="text-[14px] text-amber-300/90 leading-relaxed mt-0.5">
                     {cycle.nextHypothesis}
                   </p>
                 </div>
@@ -199,14 +199,14 @@ function NodeDot({
       {/* Core dot */}
       <div className={`relative w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
         type === 'seed'
-          ? 'border-amber-300/60 bg-amber-300/20'
+          ? 'border-amber-300/55 bg-amber-300/20'
           : type === 'terminal'
             ? 'border-earth-green/40 bg-earth-green/15'
             : active
               ? 'border-amber-300/70 bg-amber-300/30 shadow-glow-sm'
               : completed
-                ? 'border-amber-300/30 bg-amber-300/10'
-                : 'border-deep-400/20 bg-deep-700/40'
+                ? 'border-amber-300/70 bg-amber-300/10'
+                : 'border-deep-400/45 bg-deep-700/40'
       }`}>
         {type === 'seed' && (
           <span className="text-[7px] text-amber-300/80">◈</span>
@@ -215,7 +215,7 @@ function NodeDot({
           <span className="text-[7px] text-earth-green/60">✓</span>
         )}
         {type === 'cycle' && completed && (
-          <span className="text-[6px] text-amber-300/50">●</span>
+          <span className="text-[6px] text-amber-300/90">●</span>
         )}
         {type === 'cycle' && active && (
           <span className="text-[6px] text-amber-300/80 animate-pulse">◆</span>
@@ -237,11 +237,11 @@ const MODULE_MAP: Record<string, { label: string; icon: string }> = {
 function ModuleBadge({ module, iteration }: { module: string; iteration: number }) {
   const info = MODULE_MAP[module] || { label: module, icon: '·' };
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-300/10 border border-amber-300/15 animate-fade-in">
-      <span className="text-[8px] text-amber-300/60">{info.icon}</span>
-      <span className="text-[8px] font-mono text-amber-300/50">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-300/10 border border-amber-300/45 animate-fade-in">
+      <span className="text-[14px] text-amber-300/95">{info.icon}</span>
+      <span className="text-[14px] font-mono text-amber-300/90">
         {info.label}
-        {iteration > 0 && <span className="text-amber-300/30"> i{iteration}</span>}
+        {iteration > 0 && <span className="text-amber-300/75"> i{iteration}</span>}
       </span>
     </span>
   );

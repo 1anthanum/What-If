@@ -229,6 +229,148 @@ class OllamaBackend(InferenceBackend):
         return f"ollama:{self._model}"
 
 
+class OpenAICompatibleBackend(InferenceBackend):
+    """Generic OpenAI-style /v1/chat/completions client.
+
+    Works with OpenAI proper, GLM (智谱 v4), DeepSeek, and any provider
+    that exposes the OpenAI chat-completions schema. Streaming uses SSE
+    `data: {...}\\n\\n` chunks.
+
+    `provider_label` is the short tag shown in the UI (e.g. "openai", "glm",
+    "deepseek"). It also forms the prefix on `backend_name()`.
+    """
+
+    def __init__(
+        self,
+        tracker: TokenTracker,
+        provider_label: str,
+        base_url: str,
+        api_key: str,
+        model: str,
+    ):
+        self._tracker = tracker
+        self._provider = provider_label
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+        self._model = model
+
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _build_messages(self, system_prompt: str, messages: list[dict]) -> list[dict]:
+        out = [{"role": "system", "content": system_prompt}] if system_prompt else []
+        for m in messages:
+            out.append({"role": m["role"], "content": m["content"]})
+        return out
+
+    async def complete(
+        self,
+        system_prompt: str,
+        messages: list[dict],
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> str:
+        import httpx
+        body = {
+            "model": self._model,
+            "messages": self._build_messages(system_prompt, messages),
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": False,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                resp = await client.post(
+                    f"{self._base_url}/chat/completions",
+                    headers=self._headers(),
+                    json=body,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            msg = data.get("choices", [{}])[0].get("message", {}) or {}
+            # Some providers (e.g. DeepSeek thinking mode) return the chain-of-thought
+            # in reasoning_content and an empty/null content. Fall back to it.
+            content = msg.get("content") or msg.get("reasoning_content") or ""
+            usage = data.get("usage") or {}
+            self._tracker.record(
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+                label=f"{self._provider}:{self._model}",
+            )
+            return content
+        except Exception as e:
+            logger.error(f"{self._provider} complete error ({self._model}): {e}")
+            raise
+
+    async def stream(
+        self,
+        system_prompt: str,
+        messages: list[dict],
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> AsyncGenerator[str, None]:
+        import httpx, json as _json
+        body = {
+            "model": self._model,
+            "messages": self._build_messages(system_prompt, messages),
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+        }
+        prompt_tokens = 0
+        completion_tokens = 0
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self._base_url}/chat/completions",
+                    headers=self._headers(),
+                    json=body,
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line[5:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            chunk = _json.loads(payload)
+                        except _json.JSONDecodeError:
+                            continue
+                        delta = (
+                            chunk.get("choices", [{}])[0]
+                                 .get("delta", {})
+                        ) or {}
+                        # Stream both content and reasoning_content (thinking mode)
+                        # so the user actually sees output even when the provider
+                        # routes the visible answer to reasoning_content.
+                        text = delta.get("content") or delta.get("reasoning_content") or ""
+                        if text:
+                            yield text
+                        usage = chunk.get("usage")
+                        if usage:
+                            prompt_tokens = usage.get("prompt_tokens", prompt_tokens)
+                            completion_tokens = usage.get("completion_tokens", completion_tokens)
+        except Exception as e:
+            logger.error(f"{self._provider} stream error ({self._model}): {e}")
+            raise
+        finally:
+            self._tracker.record(
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+                label=f"{self._provider}-stream:{self._model}",
+            )
+
+    def backend_name(self) -> str:
+        return f"{self._provider}:{self._model}"
+
+
 # ─── Factory Functions ────────────────────────────────────────
 
 def _ollama_available() -> bool:
@@ -256,44 +398,57 @@ def get_fast_backend(tracker: TokenTracker) -> InferenceBackend:
 
 
 def get_strong_backend(tracker: TokenTracker, model: str | None = None) -> InferenceBackend:
-    """Get the backend for high-quality tasks (Stage 2/3, analysis).
-
-    Uses Claude API by default. Set WHATIF_STRONG_BACKEND_OVERRIDE=ollama
-    to route analysis through local models (lower quality, fully offline).
-    """
+    """Strong backend (judge tier alias). Honors strong_backend_override=ollama."""
     settings = get_settings()
-
     if getattr(settings, "strong_backend_override", "") == "ollama" and getattr(settings, "ollama_base_url", ""):
         return OllamaBackend(
             tracker=tracker,
             base_url=settings.ollama_base_url,
             model=getattr(settings, "ollama_model", "qwen2.5:7b"),
         )
-
-    return ClaudeBackend(tracker=tracker, model=model)
+    if model:
+        return ClaudeBackend(tracker=tracker, model=model)
+    spec = getattr(settings, "tier_judge", "claude:claude-sonnet-4-6")
+    return get_backend_from_spec(spec, tracker)
 
 
 def get_model_pool(tracker: TokenTracker) -> list[InferenceBackend]:
-    """Get a pool of diverse models for multi-perspective generation.
+    """Get a pool of diverse models for multi-perspective persona generation.
 
-    Returns multiple OllamaBackend instances (one per model in the pool),
-    or falls back to a single fast backend if no pool is configured.
-
-    Config: WHATIF_OLLAMA_MODEL_POOL="qwen2.5:7b,llama3.1:8b,mistral:7b,yi:6b,gemma2:9b"
+    Resolution order:
+      1. WHATIF_PERSONA_POOL  (mixed providers, e.g. "ollama:qwen2.5:7b,glm:glm-4-flash,openai:gpt-5-mini")
+      2. WHATIF_OLLAMA_MODEL_POOL  (legacy, Ollama only)
+      3. Single fast backend fallback
     """
     settings = get_settings()
-    pool_str = getattr(settings, "ollama_model_pool", "")
+    persona_pool_str = getattr(settings, "persona_pool", "")
+    ollama_pool_str = getattr(settings, "ollama_model_pool", "")
     base_url = getattr(settings, "ollama_base_url", "")
 
-    if pool_str and base_url:
-        models = [m.strip() for m in pool_str.split(",") if m.strip()]
+    # 1) Mixed-provider pool (preferred)
+    if persona_pool_str:
+        specs = [s.strip() for s in persona_pool_str.split(",") if s.strip()]
+        # provider:model where model itself can contain ":" (e.g. ollama:qwen2.5:7b),
+        # so simple comma split is fine — we hand each spec to get_backend_from_spec.
+        backends = []
+        for s in specs:
+            try:
+                backends.append(get_backend_from_spec(s, tracker))
+            except Exception as e:
+                logger.warning(f"persona pool: skipping invalid spec '{s}': {e}")
+        if backends:
+            return backends
+
+    # 2) Legacy ollama-only pool
+    if ollama_pool_str and base_url:
+        models = [m.strip() for m in ollama_pool_str.split(",") if m.strip()]
         if models:
             return [
                 OllamaBackend(tracker=tracker, base_url=base_url, model=m)
                 for m in models
             ]
 
-    # Fallback: single fast backend
+    # 3) Fallback: single fast backend
     return [get_fast_backend(tracker)]
 
 
@@ -303,3 +458,96 @@ def get_backend_for_persona(
     """Get a specific backend for a persona by index (round-robin from pool)."""
     pool = get_model_pool(tracker)
     return pool[persona_index % len(pool)]
+
+
+def get_backend_from_spec(spec: str, tracker: TokenTracker) -> InferenceBackend:
+    """Parse a `provider:model` spec and return the appropriate backend.
+
+    Supported providers:
+        claude:<model>     → Anthropic
+        ollama:<model>     → local Ollama
+        openai:<model>     → OpenAI
+        glm:<model>        → 智谱 GLM (OpenAI-compatible)
+        deepseek:<model>   → DeepSeek (OpenAI-compatible)
+
+    Falls back to Claude/default on any unrecognized spec.
+    """
+    settings = get_settings()
+    if ":" not in spec:
+        return ClaudeBackend(tracker=tracker, model=spec)
+    provider, _, model = spec.partition(":")
+    provider = provider.strip().lower()
+    model = model.strip()
+
+    if provider == "claude":
+        return ClaudeBackend(tracker=tracker, model=model)
+    if provider == "ollama":
+        return OllamaBackend(
+            tracker=tracker,
+            base_url=getattr(settings, "ollama_base_url", "http://localhost:11434"),
+            model=model or getattr(settings, "ollama_model", "qwen2.5:7b"),
+        )
+    if provider == "openai":
+        return OpenAICompatibleBackend(
+            tracker=tracker,
+            provider_label="openai",
+            base_url=getattr(settings, "openai_base_url", "https://api.openai.com/v1"),
+            api_key=getattr(settings, "openai_api_key", ""),
+            model=model,
+        )
+    if provider == "glm":
+        return OpenAICompatibleBackend(
+            tracker=tracker,
+            provider_label="glm",
+            base_url=getattr(settings, "glm_base_url", "https://open.bigmodel.cn/api/paas/v4"),
+            api_key=getattr(settings, "glm_api_key", ""),
+            model=model,
+        )
+    if provider == "deepseek":
+        return OpenAICompatibleBackend(
+            tracker=tracker,
+            provider_label="deepseek",
+            base_url=getattr(settings, "deepseek_base_url", "https://api.deepseek.com/v1"),
+            api_key=getattr(settings, "deepseek_api_key", ""),
+            model=model,
+        )
+    logger.warning(f"Unknown backend provider '{provider}' — falling back to Claude")
+    return ClaudeBackend(tracker=tracker, model=model)
+
+
+def get_cheap_backend(tracker: TokenTracker) -> InferenceBackend:
+    """Tier-1 — cheap/fast for tagging, label generation, injection variants."""
+    settings = get_settings()
+    spec = getattr(settings, "tier_cheap", "claude:claude-haiku-4-5-20251001")
+    return get_backend_from_spec(spec, tracker)
+
+
+def get_judge_backend(tracker: TokenTracker) -> InferenceBackend:
+    """Tier-2 — per-round evaluation, synthesis. Sonnet by default."""
+    settings = get_settings()
+    if getattr(settings, "strong_backend_override", "") == "ollama" and getattr(settings, "ollama_base_url", ""):
+        return OllamaBackend(tracker=tracker, base_url=settings.ollama_base_url, model=getattr(settings, "ollama_model", "qwen2.5:7b"))
+    spec = getattr(settings, "tier_judge", "claude:claude-sonnet-4-6")
+    return get_backend_from_spec(spec, tracker)
+
+
+def get_decider_backend(tracker: TokenTracker) -> InferenceBackend:
+    """Tier-3 — final calls / meta-synthesis. Opus by default. Used sparingly."""
+    settings = get_settings()
+    spec = getattr(settings, "tier_decider", "claude:claude-opus-4-7")
+    return get_backend_from_spec(spec, tracker)
+
+
+def get_summarizer_backend(tracker: TokenTracker) -> InferenceBackend:
+    """Local-model backend for cheap, high-volume per-statement summaries.
+
+    Picks ollama_summarizer_model (typically a larger local model like
+    qwen3.5:27b) if configured; otherwise reuses the default fast backend.
+    """
+    settings = get_settings()
+    base_url = getattr(settings, "ollama_base_url", "")
+    summarizer_model = getattr(settings, "ollama_summarizer_model", "") or getattr(settings, "ollama_model", "")
+
+    if base_url and summarizer_model:
+        return OllamaBackend(tracker=tracker, base_url=base_url, model=summarizer_model)
+    return get_fast_backend(tracker)

@@ -314,12 +314,12 @@ export function CausalGraphView() {
     <div ref={containerRef} className="w-full h-full min-h-[500px] relative">
       <svg
         ref={svgRef}
-        className="w-full h-full rounded-lg border border-deep-400/10 bg-deep-950"
+        className="w-full h-full rounded-lg border border-deep-400/40 bg-deep-950"
         style={{ minHeight: '500px' }}
       />
 
       {/* Legend */}
-      <div className="absolute bottom-3 left-3 flex gap-4 text-[9px] font-mono text-deep-200/40">
+      <div className="absolute bottom-3 left-3 flex gap-4 text-[15px] font-mono text-deep-200/85">
         {Object.entries(CATEGORY_COLORS).map(([key, color]) => (
           <div key={key} className="flex items-center gap-1.5">
             <span
@@ -336,7 +336,7 @@ export function CausalGraphView() {
       </div>
 
       {/* Edge legend */}
-      <div className="absolute bottom-3 right-3 flex gap-3 text-[9px] font-mono text-deep-200/40">
+      <div className="absolute bottom-3 right-3 flex gap-3 text-[15px] font-mono text-deep-200/85">
         <span className="flex items-center gap-1">
           <span className="w-4 h-px" style={{ backgroundColor: EDGE_COLORS.positive }} /> 正向
         </span>

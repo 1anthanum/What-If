@@ -109,7 +109,7 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
     try {
       const stream = autoLoopApi.startStream(config);
 
-      for await (const event of stream) {
+      for await (const event of stream.events) {
         const state = get();
         if (state.status !== 'running') break;
 

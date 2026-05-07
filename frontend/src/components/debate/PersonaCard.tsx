@@ -1,6 +1,7 @@
 /**
  * Displays a single persona's statement in the debate with warm ambient styling.
  */
+import type { PersonaEval } from '../../store/debateStore';
 
 const PERSONA_THEMES: Record<string, { accent: string; bg: string; label: string }> = {
   '中国农业农村部部长': { accent: '#C47D5A', bg: 'rgba(196,125,90,0.03)', label: 'GOV-CN' },
@@ -12,15 +13,92 @@ const PERSONA_THEMES: Record<string, { accent: string; bg: string; label: string
 
 const DEFAULT_THEME = { accent: '#9B7B6B', bg: 'rgba(155,123,107,0.03)', label: 'AGENT' };
 
+const STYLE_BADGES: Record<string, { color: string; bg: string }> = {
+  '经验主义': { color: '#8BA888', bg: 'rgba(139,168,136,0.10)' },
+  '理论推演': { color: '#8B9FBF', bg: 'rgba(139,159,191,0.10)' },
+  '直觉判断': { color: '#E8B988', bg: 'rgba(232,185,136,0.10)' },
+  '对抗反驳': { color: '#C47D5A', bg: 'rgba(196,125,90,0.10)' },
+  '整合调和': { color: '#9B7B6B', bg: 'rgba(155,123,107,0.10)' },
+};
+
 interface PersonaCardProps {
   personaName: string;
   personaRole?: string;
+  model?: string;
   content: string;
   isStreaming?: boolean;
+  evaluation?: PersonaEval;
 }
 
-export function PersonaCard({ personaName, personaRole, content, isStreaming }: PersonaCardProps) {
+/** Horizontal bar gauge for 0..100 evaluation dims. */
+function Gauge({ label, value, accentColor }: { label: string; value: number; accentColor: string }) {
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-mono text-deep-200 tracking-wider w-10 shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 rounded-full bg-deep-700/70 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, background: accentColor, boxShadow: `0 0 6px ${accentColor}66` }}
+        />
+      </div>
+      <span className="text-[11px] font-mono font-semibold tabular-nums text-deep-100 w-7 text-right">
+        {pct}
+      </span>
+    </div>
+  );
+}
+
+/** Bidirectional bar for stance: -100..+100 with center anchor. */
+function StanceBar({ value }: { value: number }) {
+  const v = Math.max(-100, Math.min(100, value));
+  const half = Math.abs(v) / 2;        // 0..50 (each half is 50% wide)
+  const isPro = v >= 0;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-mono text-deep-200 tracking-wider w-10 shrink-0">立场</span>
+      <div className="flex-1 relative h-1.5 rounded-full bg-deep-700/70 overflow-hidden flex">
+        {/* center divider */}
+        <span className="absolute left-1/2 top-0 bottom-0 w-px bg-deep-300/70 z-10" />
+        <div className="w-1/2 flex justify-end">
+          {!isPro && (
+            <div
+              className="h-full"
+              style={{ width: `${half * 2}%`, background: '#C47D5A', boxShadow: '0 0 6px rgba(196,125,90,0.4)' }}
+            />
+          )}
+        </div>
+        <div className="w-1/2">
+          {isPro && (
+            <div
+              className="h-full"
+              style={{ width: `${half * 2}%`, background: '#6EBF8B', boxShadow: '0 0 6px rgba(110,191,139,0.4)' }}
+            />
+          )}
+        </div>
+      </div>
+      <span
+        className="text-[11px] font-mono font-semibold tabular-nums w-7 text-right"
+        style={{ color: isPro ? '#8BCFA1' : '#D88E6E' }}
+      >
+        {v > 0 ? '+' : ''}{v}
+      </span>
+    </div>
+  );
+}
+
+/** Trim "ollama:qwen2.5:7b" → "qwen2.5:7b", "claude:claude-sonnet-4-6" → "claude-sonnet-4-6". */
+function shortenModel(label: string): string {
+  if (label.startsWith('ollama:')) return label.slice(7);
+  if (label.startsWith('claude:')) return label.slice(7);
+  return label;
+}
+
+export function PersonaCard({ personaName, personaRole, model, content, isStreaming, evaluation }: PersonaCardProps) {
   const theme = PERSONA_THEMES[personaName] || DEFAULT_THEME;
+  const isJudge = model?.startsWith('claude:');
+  const modelLabel = model ? shortenModel(model) : null;
+  const styleBadge = evaluation ? STYLE_BADGES[evaluation.style] ?? STYLE_BADGES['整合调和'] : null;
 
   return (
     <div
@@ -58,7 +136,7 @@ export function PersonaCard({ personaName, personaRole, content, isStreaming }: 
             />
             <span className="text-sm font-medium text-white">{personaName}</span>
             {personaRole && (
-              <span className="text-[10px] text-deep-200/30 font-mono">
+              <span className="text-[14px] text-deep-200/75 font-mono">
                 {personaRole}
               </span>
             )}
@@ -66,14 +144,27 @@ export function PersonaCard({ personaName, personaRole, content, isStreaming }: 
           <div className="flex items-center gap-2">
             {isStreaming && (
               <span
-                className="text-[9px] font-mono tracking-widest animate-pulse"
+                className="text-[15px] font-mono tracking-widest animate-pulse"
                 style={{ color: theme.accent }}
               >
                 TRANSMITTING
               </span>
             )}
+            {modelLabel && (
+              <span
+                className="text-[15px] font-mono tracking-wider px-1.5 py-0.5 rounded border"
+                style={{
+                  color: isJudge ? '#F5C896' : '#DAD2C8',
+                  borderColor: isJudge ? 'rgba(245,200,150,0.45)' : 'rgba(218,210,200,0.30)',
+                  backgroundColor: isJudge ? 'rgba(245,200,150,0.06)' : 'rgba(218,210,200,0.04)',
+                }}
+                title={isJudge ? 'Claude API（裁判 / 综合分析）' : '本地 Ollama 模型'}
+              >
+                {isJudge ? '⚖ ' : '◇ '}{modelLabel}
+              </span>
+            )}
             <span
-              className="text-[9px] font-mono tracking-wider px-1.5 py-0.5 rounded border"
+              className="text-[15px] font-mono tracking-wider px-1.5 py-0.5 rounded border"
               style={{
                 color: `${theme.accent}99`,
                 borderColor: `${theme.accent}20`,
@@ -90,6 +181,39 @@ export function PersonaCard({ personaName, personaRole, content, isStreaming }: 
           {content}
           {isStreaming && <span className="cursor-blink" />}
         </div>
+
+        {/* Judge evaluation block */}
+        {evaluation && styleBadge && (
+          <div className="mt-3.5 pl-4 pr-1 pt-3 border-t border-deep-400/30">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[10px] font-mono tracking-[0.22em] text-amber-300/90 uppercase">
+                ⚖ Judge Evaluation
+              </span>
+              <span
+                className="text-[10px] font-mono tracking-wider px-1.5 py-0.5 rounded border"
+                style={{
+                  color: styleBadge.color,
+                  borderColor: `${styleBadge.color}55`,
+                  backgroundColor: styleBadge.bg,
+                }}
+                title="认知风格"
+              >
+                ◇ {evaluation.style}
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              <Gauge label="置信度" value={evaluation.confidence} accentColor="#E8B988" />
+              <StanceBar value={evaluation.stance} />
+              <Gauge label="新颖性" value={evaluation.novelty} accentColor="#8B9FBF" />
+              <Gauge label="风险预" value={evaluation.risk} accentColor="#C47D5A" />
+            </div>
+            {evaluation.rationale && (
+              <p className="mt-2 text-[12px] text-deep-200/85 leading-snug italic">
+                — {evaluation.rationale}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -15,6 +15,12 @@ export interface DebateStartRequest {
   time_horizon?: string;
   personas?: Array<{ id: string; name?: string; custom_prompt?: string }>;
   language?: string;
+  model_params?: {
+    persona_temperature: number;
+    persona_max_tokens: number;
+    judge_temperature: number;
+    judge_max_tokens: number;
+  };
 }
 
 export interface DebateStartResponse {
@@ -360,7 +366,7 @@ export const debateApi = {
     }),
 
   getSummary: (sessionId: string) =>
-    request<{ summary: string; token_usage: TokenUsage }>(`/debate/${sessionId}/summary`),
+    request<{ summary: string; judge_model?: string; token_usage: TokenUsage }>(`/debate/${sessionId}/summary`),
 
   /**
    * Returns the SSE URL for running a debate round.
@@ -649,6 +655,72 @@ export interface AutoLoopResult {
 }
 
 // ─── Auto-Loop API ────────────────────────────────────────
+
+// ─── Autonomous Topic Explorer ───────────────────────────
+
+export interface AutonomousDebateConfig {
+  seed_topic: string;
+  domain?: string;
+  max_cycles?: number;
+  time_budget_seconds?: number;
+  cost_budget_usd?: number;
+  rounds_per_branch?: number;
+  branches_per_cycle?: number;
+  confidence_threshold?: number;
+}
+
+export const autonomousDebateApi = {
+  startStream: (config: AutonomousDebateConfig) =>
+    createSSEStream(`${BASE_URL}/orchestrator/autonomous-debate`, {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+  cancel: (sessionId: string) =>
+    request<{ status: string }>(`/orchestrator/autonomous-debate/${sessionId}/cancel`, {
+      method: 'POST',
+    }),
+  killBranch: (sessionId: string, branchId: string) =>
+    request<{ status: string }>(`/orchestrator/autonomous-debate/${sessionId}/kill-branch`, {
+      method: 'POST',
+      body: JSON.stringify({ branch_id: branchId }),
+    }),
+  injectSeed: (sessionId: string, text: string) =>
+    request<{ status: string; injection: string }>(`/orchestrator/autonomous-debate/${sessionId}/inject`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+  listSessions: () =>
+    request<{ sessions: Array<{ session_id: string; topic: string; branches: number; cost_usd: number; mtime: number }> }>(
+      `/orchestrator/autonomous-debate/_logs`,
+    ),
+  getBriefing: (sessionId: string) =>
+    request<{ session_id: string; markdown: string }>(`/orchestrator/autonomous-debate/${sessionId}/briefing`),
+  getLog: (sessionId: string) =>
+    request<{ session_id: string; n_events: number; events: any[] }>(`/orchestrator/autonomous-debate/${sessionId}/log`),
+  compareSessions: (sessionIds: string[]) =>
+    request<{
+      sessions: Array<{
+        session_id: string;
+        topic?: string;
+        branches_count?: number;
+        decisions_count?: number;
+        cost_usd?: number;
+        elapsed_s?: number;
+        top_branches?: Array<{
+          branch_id: string;
+          cycle: number;
+          injection: string;
+          eval: { confidence: number; coherence: number; novelty: number; risk_signal: number; one_line_takeaway: string } | null;
+        }>;
+        final_synthesis_preview?: string;
+        missing?: boolean;
+        error?: string;
+      }>;
+    }>(`/orchestrator/autonomous-debate/_compare`, {
+      method: 'POST',
+      body: JSON.stringify({ session_ids: sessionIds }),
+    }),
+};
 
 export const autoLoopApi = {
   /**

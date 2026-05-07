@@ -54,11 +54,12 @@ async def get_summary(session_id: str):
     if not session.rounds:
         raise HTTPException(status_code=400, detail="No rounds to summarize")
 
-    summary_text = await _service.generate_summary(session_id)
+    summary_text, judge_model = await _service.generate_summary(session_id)
     return {
         "session_id": session_id,
         "rounds_analyzed": len(session.rounds),
         "summary": summary_text,
+        "judge_model": judge_model,
         "token_usage": _service.get_usage(),
     }
 

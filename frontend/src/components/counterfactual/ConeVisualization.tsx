@@ -74,28 +74,28 @@ export function ConeVisualization() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="glass border border-amber-300/8 rounded-lg p-4">
+      <div className="glass border border-amber-300/35 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-gradient-to-br from-amber-300/20 to-amber-600/20 flex items-center justify-center border border-amber-300/20">
+            <div className="w-8 h-8 rounded bg-gradient-to-br from-amber-300/20 to-amber-600/20 flex items-center justify-center border border-amber-300/55">
               <span className="text-amber-300/80 text-sm">▽</span>
             </div>
             <div>
               <h3 className="text-xs font-mono text-amber-300/80 uppercase tracking-wider">
                 概率锥视图
               </h3>
-              <p className="text-[9px] font-mono text-deep-200/40 mt-0.5">
+              <p className="text-[15px] font-mono text-deep-200/85 mt-0.5">
                 {possibilityBranches.length} 个分支叠加 · 透明度 ∝ 共识度
               </p>
             </div>
           </div>
           {tokenUsage && (
-            <span className="text-[9px] font-mono text-deep-200/30 border border-deep-400/10 px-2 py-1 rounded">
+            <span className="text-[15px] font-mono text-deep-200/75 border border-deep-400/40 px-2 py-1 rounded">
               ${tokenUsage.estimated_cost_usd.toFixed(3)}
             </span>
           )}
         </div>
-        <div className="text-[10px] text-deep-200/50 bg-deep-700/30 rounded px-3 py-2 mt-3 border border-deep-400/10">
+        <div className="text-[14px] text-deep-200/50 bg-deep-700/30 rounded px-3 py-2 mt-3 border border-deep-400/40">
           假设：「{modification}」
         </div>
       </div>
@@ -103,7 +103,7 @@ export function ConeVisualization() {
       {/* SVG Cone */}
       <div
         ref={containerRef}
-        className="glass border border-deep-400/8 rounded-lg p-4 overflow-x-auto relative"
+        className="glass border border-deep-400/35 rounded-lg p-4 overflow-x-auto relative"
       >
         <svg
           width={svgWidth}
@@ -145,7 +145,7 @@ export function ConeVisualization() {
             x={PADDING - 4}
             y={yCenter + 3}
             textAnchor="end"
-            className="text-[8px] font-mono"
+            className="text-[14px] font-mono"
             fill="rgba(196,144,88,0.3)"
           >
             实际
@@ -168,7 +168,7 @@ export function ConeVisualization() {
                   x={x}
                   y={SVG_HEIGHT - PADDING + 16}
                   textAnchor="middle"
-                  className="text-[9px] font-mono"
+                  className="text-[15px] font-mono"
                   fill="rgba(255,255,255,0.2)"
                 >
                   {year}
@@ -273,8 +273,8 @@ export function ConeVisualization() {
               top: Math.max(tooltipPos.y - 20, 8),
             }}
           >
-            <div className="glass border border-amber-300/15 rounded-lg p-3 shadow-lg min-w-[220px] max-w-[280px]">
-              <div className="text-[10px] font-mono text-amber-300/60 mb-2">
+            <div className="glass border border-amber-300/45 rounded-lg p-3 shadow-lg min-w-[220px] max-w-[280px]">
+              <div className="text-[14px] font-mono text-amber-300/95 mb-2">
                 {yearSlice.year} 年
               </div>
               <div className="space-y-2">
@@ -288,14 +288,14 @@ export function ConeVisualization() {
                       />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-mono text-white/60 truncate">
+                          <span className="text-[15px] font-mono text-white/60 truncate">
                             {b.narrativeDirection}
                           </span>
-                          <span className="text-[8px] font-mono text-amber-300/40">
+                          <span className="text-[14px] font-mono text-amber-300/85">
                             {Math.round(b.consensusStrength * 100)}%
                           </span>
                         </div>
-                        <p className="text-[9px] text-deep-200/45 leading-snug mt-0.5">
+                        <p className="text-[15px] text-deep-200/45 leading-snug mt-0.5">
                           {b.counterfactual.length > 80
                             ? b.counterfactual.slice(0, 80) + '…'
                             : b.counterfactual}
@@ -310,7 +310,7 @@ export function ConeVisualization() {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-6 text-[9px] font-mono text-deep-200/30">
+      <div className="flex items-center justify-center gap-6 text-[15px] font-mono text-deep-200/75">
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-1.5 rounded-sm" style={{ backgroundColor: 'rgb(226,164,68)', opacity: 0.6 }} />
           <span>高共识</span>

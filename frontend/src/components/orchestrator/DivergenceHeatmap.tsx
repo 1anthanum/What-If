@@ -61,14 +61,14 @@ export function DivergenceHeatmap({ cycles, selectedCycleIndex }: Props) {
     <div className="glass border border-purple-400/10 rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono text-purple-400/50 uppercase tracking-wider">
+          <span className="text-[14px] font-mono text-purple-400/50 uppercase tracking-wider">
             认知分歧矩阵
           </span>
-          <span className="text-[8px] font-mono text-deep-200/25">
+          <span className="text-[14px] font-mono text-deep-200/70">
             第 {displayCycle.cycle} 轮
           </span>
         </div>
-        <div className="flex items-center gap-3 text-[8px] font-mono text-deep-200/30">
+        <div className="flex items-center gap-3 text-[14px] font-mono text-deep-200/75">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-sm" style={{ background: 'rgba(239,68,68,0.5)' }} />
             反对
@@ -89,11 +89,11 @@ export function DivergenceHeatmap({ cycles, selectedCycleIndex }: Props) {
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="text-[8px] font-mono text-deep-200/30 text-left pr-2 pb-2 w-20" />
+              <th className="text-[14px] font-mono text-deep-200/75 text-left pr-2 pb-2 w-20" />
               {matrix.arguments.map((arg, i) => (
                 <th
                   key={i}
-                  className="text-[8px] font-mono text-deep-200/40 pb-2 px-1 text-center max-w-[80px] truncate"
+                  className="text-[14px] font-mono text-deep-200/85 pb-2 px-1 text-center max-w-[80px] truncate"
                   title={arg}
                 >
                   {arg}
@@ -104,17 +104,17 @@ export function DivergenceHeatmap({ cycles, selectedCycleIndex }: Props) {
           <tbody>
             {personaIds.map((pid) => (
               <tr key={pid}>
-                <td className="text-[9px] font-mono text-deep-200/45 pr-2 py-0.5 whitespace-nowrap">
+                <td className="text-[15px] font-mono text-deep-200/45 pr-2 py-0.5 whitespace-nowrap">
                   {PERSONA_LABELS[pid] ?? pid}
                 </td>
                 {matrix.stances[pid]?.map((score, i) => (
                   <td key={i} className="px-0.5 py-0.5">
                     <div
-                      className="rounded text-center text-[9px] font-mono py-1.5 transition-all hover:scale-110 cursor-default"
+                      className="rounded text-center text-[15px] font-mono py-1.5 transition-all hover:scale-110 cursor-default"
                       style={{ background: stanceColor(score) }}
                       title={`${PERSONA_LABELS[pid] ?? pid}: ${matrix.arguments[i]} = ${score}`}
                     >
-                      <span className={score === 0 ? 'text-deep-200/20' : score > 0 ? 'text-blue-300/70' : 'text-red-300/70'}>
+                      <span className={score === 0 ? 'text-deep-200/65' : score > 0 ? 'text-blue-300/70' : 'text-red-300/70'}>
                         {stanceText(score)}
                       </span>
                     </div>
@@ -128,8 +128,8 @@ export function DivergenceHeatmap({ cycles, selectedCycleIndex }: Props) {
 
       {/* Cross-cycle evolution indicator */}
       {cyclesWithStances.length > 1 && (
-        <div className="pt-2 border-t border-deep-400/8">
-          <span className="text-[8px] font-mono text-deep-200/25 block mb-1">
+        <div className="pt-2 border-t border-deep-400/35">
+          <span className="text-[14px] font-mono text-deep-200/70 block mb-1">
             轮次演化 ({cyclesWithStances.length} 轮数据)
           </span>
           <div className="flex gap-1">

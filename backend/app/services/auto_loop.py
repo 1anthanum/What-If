@@ -494,13 +494,16 @@ class AutoLoopScheduler:
         })
 
         # Synthesize all perspectives
+        judge_backend = get_strong_backend(self.tracker)
         synthesis = await self._synthesize_philosophical(
             question, seed_question, all_responses, chain,
+            backend=judge_backend,
         )
 
         yield sse_event("phil_synthesis_done", {
             "cycle": cycle_num,
             "synthesis": synthesis,
+            "model": judge_backend.backend_name(),
         })
 
         # Feature 1: Extract stance matrix (epistemic divergence map)
@@ -519,6 +522,7 @@ class AutoLoopScheduler:
         seed_question: str,
         responses: list[dict],
         chain: list[str],
+        backend=None,
     ) -> str:
         """Synthesize 5 philosophical perspectives into a coherent analysis."""
         system = (
@@ -541,7 +545,8 @@ class AutoLoopScheduler:
         )
 
         try:
-            backend = get_strong_backend(self.tracker)
+            if backend is None:
+                backend = get_strong_backend(self.tracker)
             return await backend.complete(
                 system, [{"role": "user", "content": user}], max_tokens=800,
             )

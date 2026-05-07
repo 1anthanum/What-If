@@ -5,6 +5,8 @@ import { CausalView } from './components/causal/CausalView';
 import { CounterfactualView } from './components/counterfactual/CounterfactualView';
 import { FeedbackLoopView } from './components/orchestrator/FeedbackLoopView';
 import { CostBadge } from './components/common/CostBadge';
+import { CumulativeCostBadge } from './components/common/CumulativeCostBadge';
+import { SettingsPanel } from './components/common/SettingsPanel';
 import { useDebateStore } from './store/debateStore';
 import { useCausalStore } from './store/causalStore';
 import { useCounterfactualStore } from './store/counterfactualStore';
@@ -55,33 +57,37 @@ export default function App() {
       <div className="fixed bottom-0 right-0 w-96 h-96 bg-amber-800/[0.03] rounded-full blur-[100px] pointer-events-none" />
 
       {/* Header */}
-      <header className="relative z-10 glass border-b border-amber-300/[0.06]">
-        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded bg-gradient-to-br from-amber-300 to-amber-600 flex items-center justify-center text-deep-950 font-bold text-xs shadow-glow-sm">
-              ◈
+      <header className="relative z-10 glass border-b border-amber-300/[0.10]">
+        <div className="max-w-7xl mx-auto px-7 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative w-10 h-10 rounded-lg bg-gradient-to-br from-amber-200 via-amber-400 to-amber-700 flex items-center justify-center text-deep-950 font-bold text-xl shadow-glow">
+              <span className="absolute inset-0 rounded-lg bg-gradient-to-br from-white/30 to-transparent" />
+              <span className="relative">◈</span>
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-white tracking-wide">WHAT-IF</h1>
-              <p className="text-[9px] text-amber-300/40 font-mono tracking-[0.2em] uppercase">
-                Macro Simulation
+              <h1 className="text-xl font-bold text-white tracking-[0.04em] leading-none">
+                WHAT<span className="text-amber-300">·</span>IF
+              </h1>
+              <p className="mt-1 text-[11px] text-amber-300/95 font-mono tracking-[0.30em] uppercase">
+                Macro Simulation Engine
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-5">
-            {tokenUsage && <CostBadge usage={tokenUsage} />}
-            <div className="flex items-center gap-2">
-              <span className="status-dot bg-earth-green text-earth-green" />
-              <span className="text-[9px] font-mono text-deep-200 uppercase tracking-wider">
-                Online
+          <div className="flex items-center gap-4">
+            <CumulativeCostBadge activeModule={activeModule} />
+            <SettingsPanel />
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-deep-800/60 border border-deep-400/40">
+              <span className="status-dot bg-electric" />
+              <span className="text-[11px] font-mono uppercase tracking-[0.22em] glow-electric font-semibold">
+                ONLINE
               </span>
             </div>
             {hasActiveSession && (
               <button
                 onClick={handleReset}
-                className="text-[10px] font-mono text-deep-200 hover:text-amber-300 transition-colors px-2.5 py-1 border border-deep-400/20 rounded hover:border-amber-300/20"
+                className="text-[12px] font-mono tracking-[0.18em] text-deep-100 hover:text-amber-300 transition-colors px-3.5 py-1.5 border border-deep-400/45 rounded-md hover:border-amber-300/55 hover:bg-amber-300/[0.04]"
               >
-                NEW
+                ＋ NEW
               </button>
             )}
           </div>
@@ -89,33 +95,43 @@ export default function App() {
       </header>
 
       {/* Module Tabs */}
-      <nav className="relative z-10 border-b border-deep-400/8 bg-deep-800/40">
-        <div className="max-w-7xl mx-auto px-6 flex gap-0.5">
-          {MODULES.map(tab => (
+      <nav className="relative z-10 border-b border-deep-400/35 bg-deep-800/50 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-7 flex items-end gap-1">
+          {MODULES.map((tab, i) => (
             <button
               key={tab.key}
               disabled={!tab.ready}
               onClick={() => tab.ready && setActiveModule(tab.key)}
               className={`
-                relative py-3 px-5 text-xs tracking-wide transition-all
+                relative py-4 px-6 text-[15px] tracking-[0.04em] font-medium transition-all duration-200
                 ${activeModule === tab.key
-                  ? 'text-amber-300 font-medium'
-                  : 'text-deep-200/30 hover:text-deep-200/60'
+                  ? 'text-amber-200'
+                  : 'text-deep-200 hover:text-deep-50'
                 }
-                ${!tab.ready ? 'cursor-not-allowed opacity-25' : ''}
+                ${!tab.ready ? 'cursor-not-allowed opacity-30' : ''}
               `}
             >
+              <span className="font-mono text-[10px] text-deep-300/75 mr-2 align-middle">
+                {String(i + 1).padStart(2, '0')}
+              </span>
               {tab.label}
               {activeModule === tab.key && (
-                <span className="absolute bottom-0 left-2 right-2 h-px bg-gradient-to-r from-transparent via-amber-300/60 to-transparent" />
+                <>
+                  <span className="absolute -bottom-px left-3 right-3 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
+                  <span className="absolute inset-0 bg-gradient-to-b from-amber-300/[0.06] to-transparent pointer-events-none" />
+                </>
               )}
               {!tab.ready && (
-                <span className="ml-1.5 text-[8px] font-mono text-deep-300/40 border border-deep-400/10 px-1.5 py-0.5 rounded">
+                <span className="ml-1.5 text-[10px] font-mono text-deep-300/65 border border-deep-400/40 px-1.5 py-0.5 rounded">
                   SOON
                 </span>
               )}
             </button>
           ))}
+          {/* Active-module mini cost badge — shows current module's spend without distracting from total */}
+          <div className="ml-auto py-3 hidden md:block">
+            {tokenUsage && <CostBadge usage={tokenUsage as any} />}
+          </div>
         </div>
       </nav>
 
@@ -149,8 +165,8 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-deep-400/5 py-4 text-center">
-        <p className="text-[9px] font-mono text-deep-300/20 tracking-[0.15em]">
+      <footer className="relative z-10 border-t border-deep-400/30 py-4 text-center">
+        <p className="text-[15px] font-mono text-deep-300/55 tracking-[0.15em]">
           POWERED BY CLAUDE API — REAL-TIME TOKEN TRACKING
         </p>
       </footer>

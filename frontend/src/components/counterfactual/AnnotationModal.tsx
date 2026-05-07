@@ -63,7 +63,7 @@ export function AnnotationModal() {
       />
 
       {/* Modal */}
-      <div className="relative glass border border-amber-300/15 rounded-xl p-6 w-full max-w-lg mx-4 space-y-5 shadow-2xl">
+      <div className="relative glass border border-amber-300/45 rounded-xl p-6 w-full max-w-lg mx-4 space-y-5 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-white/90">
@@ -71,25 +71,25 @@ export function AnnotationModal() {
           </h3>
           <button
             onClick={() => setAnnotatingYear(null)}
-            className="w-6 h-6 rounded-full flex items-center justify-center text-deep-200/40 hover:text-white/80 hover:bg-deep-400/20 transition-colors text-sm"
+            className="w-6 h-6 rounded-full flex items-center justify-center text-deep-200/85 hover:text-white/80 hover:bg-deep-400/20 transition-colors text-sm"
           >
             ✕
           </button>
         </div>
 
         {/* Original claim */}
-        <div className="p-3 rounded bg-amber-300/[0.04] border border-amber-300/10">
-          <p className="text-[9px] font-mono text-amber-300/40 uppercase tracking-wider mb-1">
+        <div className="p-3 rounded bg-amber-300/[0.04] border border-amber-300/40">
+          <p className="text-[15px] font-mono text-amber-300/85 uppercase tracking-wider mb-1">
             AI 原始推演
           </p>
-          <p className="text-[11px] text-amber-300/60 leading-relaxed">
+          <p className="text-[15px] text-amber-300/95 leading-relaxed">
             {point.counterfactual}
           </p>
         </div>
 
         {/* Constraint type */}
         <div>
-          <p className="text-[10px] font-mono text-deep-200/40 uppercase tracking-wider mb-2">
+          <p className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider mb-2">
             标注类型
           </p>
           <div className="grid grid-cols-3 gap-2">
@@ -100,11 +100,11 @@ export function AnnotationModal() {
                 className={`p-2 rounded border text-center transition-all ${
                   constraintType === ct.value
                     ? 'border-blue-400/30 bg-blue-500/[0.08] text-blue-300/80'
-                    : 'border-deep-400/10 bg-deep-700/20 text-deep-200/40 hover:text-deep-200/60'
+                    : 'border-deep-400/40 bg-deep-700/20 text-deep-200/85 hover:text-deep-200/95'
                 }`}
               >
-                <p className="text-[10px] font-medium">{ct.label}</p>
-                <p className="text-[8px] mt-0.5 opacity-60">{ct.desc}</p>
+                <p className="text-[14px] font-medium">{ct.label}</p>
+                <p className="text-[14px] mt-0.5 opacity-60">{ct.desc}</p>
               </button>
             ))}
           </div>
@@ -112,7 +112,7 @@ export function AnnotationModal() {
 
         {/* Correction input */}
         <div>
-          <p className="text-[10px] font-mono text-deep-200/40 uppercase tracking-wider mb-2">
+          <p className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider mb-2">
             你的修正
           </p>
           <textarea
@@ -120,21 +120,21 @@ export function AnnotationModal() {
             onChange={e => setCorrection(e.target.value)}
             placeholder="描述你认为更准确的情况..."
             rows={3}
-            className="w-full bg-deep-700/30 border border-deep-400/15 rounded-lg px-4 py-3 text-sm text-white/80 placeholder:text-deep-300/25 focus:outline-none focus:border-blue-400/25 resize-none"
+            className="w-full bg-deep-700/30 border border-deep-400/45 rounded-lg px-4 py-3 text-sm text-white/80 placeholder:text-deep-300/65 focus:outline-none focus:border-blue-400/25 resize-none"
           />
         </div>
 
         {/* Source */}
         <div>
-          <p className="text-[10px] font-mono text-deep-200/40 uppercase tracking-wider mb-2">
-            来源 <span className="text-deep-200/20">（可选）</span>
+          <p className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider mb-2">
+            来源 <span className="text-deep-200/65">（可选）</span>
           </p>
           <input
             type="text"
             value={sourceDescription}
             onChange={e => setSourceDescription(e.target.value)}
             placeholder="例如: World Bank Open Data, 学术论文..."
-            className="w-full bg-deep-700/30 border border-deep-400/15 rounded-lg px-4 py-2.5 text-sm text-white/80 placeholder:text-deep-300/25 focus:outline-none focus:border-blue-400/25"
+            className="w-full bg-deep-700/30 border border-deep-400/45 rounded-lg px-4 py-2.5 text-sm text-white/80 placeholder:text-deep-300/65 focus:outline-none focus:border-blue-400/25"
           />
         </div>
 
@@ -142,7 +142,7 @@ export function AnnotationModal() {
         <div className="flex items-center justify-end gap-3 pt-2">
           <button
             onClick={() => setAnnotatingYear(null)}
-            className="px-4 py-2 text-xs font-mono text-deep-200/40 hover:text-deep-200/60 transition-colors"
+            className="px-4 py-2 text-xs font-mono text-deep-200/85 hover:text-deep-200/95 transition-colors"
           >
             取消
           </button>

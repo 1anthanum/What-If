@@ -71,18 +71,18 @@ export function SpectatorPanel() {
   };
 
   return (
-    <div className="glass border border-deep-400/10 rounded-lg p-4 space-y-4">
+    <div className="glass border border-deep-400/40 rounded-lg p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono text-deep-200/40 uppercase tracking-wider">
+          <span className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider">
             观战面板
           </span>
           {isRunning && (
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/60 animate-pulse" />
           )}
         </div>
-        <span className="text-[8px] font-mono text-deep-200/20">
+        <span className="text-[14px] font-mono text-deep-200/65">
           LIVE
         </span>
       </div>
@@ -100,17 +100,17 @@ export function SpectatorPanel() {
 
       {/* Per-persona word count bars */}
       <div className="space-y-1.5">
-        <span className="text-[8px] font-mono text-deep-200/25 block">各模型累计产出</span>
+        <span className="text-[14px] font-mono text-deep-200/70 block">各模型累计产出</span>
         {Object.entries(totalPersonaWords)
           .sort(([, a], [, b]) => b - a)
           .map(([pid, count]) => {
-            const colors = PERSONA_COLORS[pid] ?? { bar: 'bg-deep-400/30', text: 'text-deep-200/40' };
+            const colors = PERSONA_COLORS[pid] ?? { bar: 'bg-deep-400/30', text: 'text-deep-200/85' };
             const width = (count / stats.maxWords) * 100;
             const isActive = pid === activePersonaId;
 
             return (
               <div key={pid} className="flex items-center gap-2">
-                <span className={`text-[8px] font-mono w-14 shrink-0 text-right ${colors.text}`}>
+                <span className={`text-[14px] font-mono w-14 shrink-0 text-right ${colors.text}`}>
                   {PERSONA_NAMES[pid] ?? pid}
                 </span>
                 <div className="flex-1 h-3 bg-deep-700/20 rounded-sm overflow-hidden relative">
@@ -122,7 +122,7 @@ export function SpectatorPanel() {
                     <div className="absolute right-0 top-0 h-full w-1 bg-white/30 animate-pulse" />
                   )}
                 </div>
-                <span className="text-[8px] font-mono text-deep-200/25 w-10 text-right tabular-nums">
+                <span className="text-[14px] font-mono text-deep-200/70 w-10 text-right tabular-nums">
                   {count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}
                 </span>
               </div>
@@ -132,11 +132,11 @@ export function SpectatorPanel() {
 
       {/* Active persona indicator */}
       {isRunning && activePersonaId && (
-        <div className="flex items-center gap-2 pt-1 border-t border-deep-400/8">
+        <div className="flex items-center gap-2 pt-1 border-t border-deep-400/35">
           <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"
             style={{ color: PERSONA_COLORS[activePersonaId]?.text.replace('text-', '').replace('/60', '') || 'rgba(200,200,200,0.4)' }}
           />
-          <span className="text-[9px] font-mono text-deep-200/35">
+          <span className="text-[15px] font-mono text-deep-200/35">
             正在发言: {PERSONA_NAMES[activePersonaId] ?? activePersonaId}
           </span>
         </div>
@@ -144,7 +144,7 @@ export function SpectatorPanel() {
 
       {/* Adversarial badge */}
       {adversarial && (
-        <div className="flex items-center gap-1.5 text-[8px] font-mono text-red-400/40 border-t border-deep-400/8 pt-2">
+        <div className="flex items-center gap-1.5 text-[14px] font-mono text-red-400/40 border-t border-deep-400/35 pt-2">
           <span>⚡</span>
           <span>对抗模式已启用</span>
         </div>
@@ -156,8 +156,8 @@ export function SpectatorPanel() {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <span className="text-[11px] font-mono text-white/60 block tabular-nums">{value}</span>
-      <span className="text-[7px] font-mono text-deep-200/25 uppercase tracking-wider">{label}</span>
+      <span className="text-[15px] font-mono text-white/60 block tabular-nums">{value}</span>
+      <span className="text-[7px] font-mono text-deep-200/70 uppercase tracking-wider">{label}</span>
     </div>
   );
 }
