@@ -10,6 +10,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAutoLoopStore, type PhilPersonaState } from '../../store/autoLoopStore';
 import { useCounterfactualStore } from '../../store/counterfactualStore';
+import { autoLoopApi } from '../../services/api';
+import { PHILOSOPHICAL_PRESETS, CATEGORY_META, type PhilosophicalPreset } from './PhilosophicalPresets';
 import { EvolutionChain } from './EvolutionChain';
 import { DivergenceHeatmap } from './DivergenceHeatmap';
 import { ForkingTree } from './ForkingTree';
@@ -48,6 +50,8 @@ export function AutoLoopView() {
     stoppedReason,
     elapsedSeconds,
     activePersonaId,
+    finalSynthesis,
+    finalSynthPending,
   } = store;
 
   const selectedEvent = cfStore.selectedEvent;
@@ -57,6 +61,14 @@ export function AutoLoopView() {
   const [adversarialEnabled, setAdversarialEnabled] = useState(false);
   const [stanceEnabled, setStanceEnabled] = useState(false);
   const [branchingEnabled, setBranchingEnabled] = useState(false);
+  const [flipStanceEnabled, setFlipStanceEnabled] = useState(false);
+  // Philosophical presets
+  const [presetCategory, setPresetCategory] = useState<PhilosophicalPreset['category'] | 'all'>('all');
+  const [presetsCollapsed, setPresetsCollapsed] = useState(false);
+  // Topic utility state
+  const [critique, setCritique] = useState<import('../../services/api').TopicCritique | null>(null);
+  const [decomposition, setDecomposition] = useState<import('../../services/api').TopicDecomposition | null>(null);
+  const [topicBusy, setTopicBusy] = useState<'critique' | 'decompose' | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Elapsed timer
@@ -92,7 +104,8 @@ export function AutoLoopView() {
       adversarial: configMode === 'philosophical' ? adversarialEnabled : false,
       extract_stances: configMode === 'philosophical' ? stanceEnabled : false,
       branching: configMode === 'philosophical' ? branchingEnabled : false,
-    };
+      flip_stance: configMode === 'philosophical' ? flipStanceEnabled : false,
+    } as AutoLoopConfig & { flip_stance?: boolean };
     store.start(config);
   };
 
@@ -175,13 +188,127 @@ export function AutoLoopView() {
           {/* Input — adapts to mode */}
           {(configMode === 'philosophical' || selectedEvent) && (
             <>
+              {/* Philosophical preset library — counter-intuitive thought experiments */}
+              {configMode === 'philosophical' && (() => {
+                const visible = presetCategory === 'all'
+                  ? PHILOSOPHICAL_PRESETS
+                  : PHILOSOPHICAL_PRESETS.filter(p => p.category === presetCategory);
+                return (
+                  <div className="rounded-lg bg-deep-800/40 border tk-border-faint p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-mono tracking-[0.20em] text-amber-300/95 uppercase">
+                        💭 反直觉哲学议题库 · {PHILOSOPHICAL_PRESETS.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPresetsCollapsed(!presetsCollapsed)}
+                        className="text-[11px] font-mono tk-text-muted hover:text-amber-300 px-2 py-0.5 rounded border tk-border-faint hover:tk-border"
+                      >
+                        {presetsCollapsed ? '▼ 展开' : '▲ 收起'}
+                      </button>
+                    </div>
+                    {!presetsCollapsed && (
+                      <>
+                        {/* Category filter */}
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => setPresetCategory('all')}
+                            className={`text-[11px] font-mono px-2 py-0.5 rounded transition-all ${
+                              presetCategory === 'all'
+                                ? 'bg-amber-300/[0.08] border border-amber-300/55 text-amber-200'
+                                : 'bg-deep-900/40 border tk-border-faint tk-text-secondary hover:tk-border'
+                            }`}
+                          >全部 {PHILOSOPHICAL_PRESETS.length}</button>
+                          {Object.entries(CATEGORY_META).map(([cat, meta]) => {
+                            const count = PHILOSOPHICAL_PRESETS.filter(p => p.category === cat).length;
+                            const active = presetCategory === cat;
+                            return (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => setPresetCategory(cat as any)}
+                                className={`text-[11px] font-mono px-2 py-0.5 rounded transition-all ${
+                                  active
+                                    ? 'bg-amber-300/[0.08] border border-amber-300/55 text-amber-200'
+                                    : 'bg-deep-900/40 border tk-border-faint tk-text-secondary hover:tk-border'
+                                }`}
+                              >
+                                <span className="mr-1">{meta.icon}</span>{meta.label} {count}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const pool = visible.filter(p => p.question !== seedInput);
+                              const pick = (pool.length > 0 ? pool : visible)[
+                                Math.floor(Math.random() * (pool.length > 0 ? pool.length : visible.length))
+                              ];
+                              if (pick) {
+                                setSeedInput(pick.question);
+                                setCritique(null); setDecomposition(null);
+                              }
+                            }}
+                            className="ml-auto text-[11px] font-mono px-2 py-0.5 rounded bg-amber-300/[0.06] border border-amber-300/45 text-amber-300/95 hover:bg-amber-300/[0.12] hover:border-amber-300/65"
+                            title="随机抽一个反直觉议题"
+                          >
+                            🎲 SURPRISE
+                          </button>
+                        </div>
+
+                        {/* Preset grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-[320px] overflow-y-auto">
+                          {visible.map(p => {
+                            const selected = seedInput.trim() === p.question.trim();
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setSeedInput(p.question);
+                                  setCritique(null); setDecomposition(null);
+                                }}
+                                className={`text-left rounded p-2.5 transition-all ${
+                                  selected
+                                    ? 'bg-amber-300/[0.08] border border-amber-300/65 shadow-glow-sm'
+                                    : 'bg-deep-900/40 border tk-border-faint hover:tk-border hover:bg-amber-300/[0.03]'
+                                }`}
+                                title={p.hook}
+                              >
+                                <div className="flex items-baseline justify-between gap-2 mb-1">
+                                  <span className={`text-[13px] font-medium leading-snug ${
+                                    selected ? 'text-amber-100' : 'text-deep-50'
+                                  }`}>
+                                    {p.title}
+                                  </span>
+                                  <span className="text-[9px] font-mono tk-cool-soft shrink-0 mt-0.5">
+                                    {CATEGORY_META[p.category].icon}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] tk-text-muted leading-snug line-clamp-2">
+                                  {p.question}
+                                </p>
+                                <p className="text-[10px] font-mono tk-cool-soft italic mt-1 leading-snug">
+                                  钩子：{p.hook}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div>
                 <label className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider mb-1.5 block">
                   {configMode === 'philosophical' ? '哲学问题 — 对话的起点' : '种子假设 — 探索的起点'}
                 </label>
                 <textarea
                   value={seedInput}
-                  onChange={(e) => setSeedInput(e.target.value)}
+                  onChange={(e) => { setSeedInput(e.target.value); setCritique(null); setDecomposition(null); }}
                   placeholder={
                     configMode === 'philosophical'
                       ? '例如：自由意志是否存在？如果一切行为都由因果链决定，道德责任是否是一种幻觉？'
@@ -190,6 +317,125 @@ export function AutoLoopView() {
                   rows={3}
                   className="w-full bg-deep-700/30 border border-deep-400/45 rounded-lg px-4 py-2.5 text-sm text-white/80 placeholder:text-deep-300/65 focus:outline-none focus:border-amber-300/25 resize-none transition-colors"
                 />
+
+                {/* Topic utility row — pre-flight critique + decompose */}
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!seedInput.trim() || topicBusy !== null}
+                    onClick={async () => {
+                      setTopicBusy('critique');
+                      try {
+                        const r = await (await import('../../services/api')).topicApi.critique(seedInput.trim());
+                        setCritique(r);
+                      } catch (e) { console.error(e); }
+                      finally { setTopicBusy(null); }
+                    }}
+                    className="text-[11px] font-mono tracking-[0.16em] px-3 py-1.5 rounded border border-amber-300/45 text-amber-300/95 hover:border-amber-300/65 hover:bg-amber-300/[0.05] disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Haiku 快速预审议题（~$0.001）"
+                  >
+                    {topicBusy === 'critique' ? '审查中…' : '📝 议题预审'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!seedInput.trim() || topicBusy !== null}
+                    onClick={async () => {
+                      setTopicBusy('decompose');
+                      try {
+                        const r = await (await import('../../services/api')).topicApi.decompose(seedInput.trim());
+                        setDecomposition(r);
+                      } catch (e) { console.error(e); }
+                      finally { setTopicBusy(null); }
+                    }}
+                    className="text-[11px] font-mono tracking-[0.16em] px-3 py-1.5 rounded border border-deep-400/45 text-deep-100 hover:border-amber-300/55 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="检测复合议题并拆分（Sonnet）"
+                  >
+                    {topicBusy === 'decompose' ? '拆分中…' : '🔀 拆分议题'}
+                  </button>
+                  {(critique || decomposition) && (
+                    <button
+                      type="button"
+                      onClick={() => { setCritique(null); setDecomposition(null); }}
+                      className="ml-auto text-[10px] font-mono text-deep-300 hover:text-amber-300 px-2 py-1"
+                    >✕ 清空</button>
+                  )}
+                </div>
+
+                {/* Critique result */}
+                {critique && (
+                  <div className="mt-2 rounded-lg bg-amber-300/[0.04] border border-amber-300/35 p-3 animate-fade-in-up text-[12px]">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="font-mono tracking-[0.2em] text-amber-300/95 uppercase text-[10px]">
+                        📝 预审结果
+                      </span>
+                      <span className="font-mono text-[10px] text-deep-300">
+                        复杂度 {critique.complexity_score}/10
+                        {critique.ready_to_run ? ' · ✓ 可直接跑' : ' · ⚠ 建议优化'}
+                      </span>
+                    </div>
+                    {critique.issues.length > 0 && (
+                      <ul className="space-y-0.5 mb-2">
+                        {critique.issues.map((iss, i) => (
+                          <li key={i} className="text-deep-100 leading-snug">· {iss}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {critique.suggested_rewrite && critique.suggested_rewrite !== seedInput.trim() && (
+                      <div className="border-t border-amber-300/25 pt-2 mt-2">
+                        <p className="text-[10px] font-mono text-amber-300/85 mb-1">建议改写：</p>
+                        <p className="text-deep-50 italic leading-snug">{critique.suggested_rewrite}</p>
+                        <button
+                          type="button"
+                          onClick={() => { setSeedInput(critique.suggested_rewrite); setCritique(null); }}
+                          className="mt-1.5 text-[11px] font-mono px-2 py-1 rounded border border-amber-300/55 text-amber-300 hover:bg-amber-300/[0.08]"
+                        >
+                          ✓ 采纳改写
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Decomposition result */}
+                {decomposition && (
+                  <div className="mt-2 rounded-lg bg-deep-800/60 border border-deep-400/45 p-3 animate-fade-in-up text-[12px]">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="font-mono tracking-[0.2em] text-amber-300/95 uppercase text-[10px]">
+                        🔀 议题拆分
+                      </span>
+                      <span className="font-mono text-[10px] text-deep-300">
+                        {decomposition.is_compound
+                          ? `复合议题 — 拆为 ${decomposition.sub_topics.length} 个`
+                          : '议题已聚焦，无需拆分'}
+                      </span>
+                    </div>
+                    {decomposition.reasoning && (
+                      <p className="text-[11px] text-deep-300 italic leading-snug mb-2">
+                        {decomposition.reasoning}
+                      </p>
+                    )}
+                    {decomposition.is_compound && (
+                      <div className="space-y-1.5">
+                        {decomposition.sub_topics.map((s, i) => (
+                          <div key={i} className="flex items-start gap-2 rounded bg-deep-900/50 border border-deep-400/30 px-2 py-1.5">
+                            <span className="font-mono text-[10px] text-amber-300/85 shrink-0 mt-0.5">{i + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-deep-50 font-medium">{s.title}</p>
+                              <p className="text-[11px] text-deep-200 leading-snug mt-0.5">{s.hypothesis}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { setSeedInput(s.hypothesis); setDecomposition(null); }}
+                              className="text-[10px] font-mono px-2 py-1 rounded border border-amber-300/45 text-amber-300 hover:bg-amber-300/[0.06] shrink-0"
+                            >
+                              用此跑
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Philosophical mode: persona preview */}
@@ -244,6 +490,13 @@ export function AutoLoopView() {
                       enabled={branchingEnabled}
                       onToggle={setBranchingEnabled}
                       color="amber"
+                    />
+                    <FeatureToggle
+                      label="立场反转"
+                      description="cycle ≥2 时强制每位 persona 论证与自身传统相反的立场，检验思想韧性"
+                      enabled={flipStanceEnabled}
+                      onToggle={setFlipStanceEnabled}
+                      color="purple"
                     />
                   </div>
                 </div>
@@ -482,12 +735,49 @@ export function AutoLoopView() {
                   </p>
                 </div>
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    const sid = (store as any).sessionId;
+                    if (!sid) return;
+                    try {
+                      const r = await autoLoopApi.getBriefing(sid);
+                      const blob = new Blob([r.markdown], { type: 'text/markdown' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `whatif-auto-${sid}.md`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (e) { console.error(e); }
+                  }}
+                  className="text-[12px] font-mono tracking-[0.18em] text-amber-300/95 hover:text-amber-200 px-3 py-1.5 rounded border border-amber-300/45 hover:border-amber-300/70 hover:bg-amber-300/[0.06] transition-all"
+                  title="下载完整辩论简报（含每轮所有 persona 完整发言）"
+                >
+                  📄 EXPORT
+                </button>
+                <button
+                  onClick={async () => {
+                    const sid = (store as any).sessionId;
+                    if (!sid) return;
+                    try {
+                      const r = await autoLoopApi.getBriefing(sid);
+                      await navigator.clipboard.writeText(r.markdown);
+                      alert('已复制到剪贴板');
+                    } catch (e) { console.error(e); }
+                  }}
+                  className="text-[12px] font-mono tracking-[0.18em] text-deep-100 hover:text-amber-300 px-3 py-1.5 rounded border border-deep-400/45 hover:border-amber-300/55 transition-all"
+                  title="复制 markdown 简报"
+                >
+                  ⎘ COPY
+                </button>
               <button
                 onClick={() => store.reset()}
                 className="text-[14px] font-mono text-deep-200/85 hover:text-amber-300/70 transition-colors px-3 py-1.5 border border-deep-400/45 rounded hover:border-amber-300/55"
               >
                 新对话
               </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -539,6 +829,33 @@ export function AutoLoopView() {
               ))}
             </div>
           </div>
+
+          {/* Cross-cycle Opus meta-synthesis (only philosophical, ≥2 cycles) */}
+          {isPhilosophical && (finalSynthPending || finalSynthesis) && (
+            <div className="glass border border-amber-300/55 rounded-xl p-6 shadow-glow-lg animate-fade-in-up">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-[12px] font-mono tracking-[0.22em] text-amber-300 uppercase font-semibold">
+                  ⚖ Opus 跨 Cycle 元综合
+                </span>
+                <span className="flex-1 h-px bg-amber-300/30" />
+                {finalSynthPending && (
+                  <span className="flex items-center gap-1.5 text-[11px] font-mono text-amber-300/85">
+                    <span className="w-2.5 h-2.5 border-2 border-amber-300/50 border-t-amber-300 rounded-full animate-spin" />
+                    撰写中…
+                  </span>
+                )}
+              </div>
+              {finalSynthesis ? (
+                <div className="text-[15px] text-deep-50 leading-relaxed whitespace-pre-wrap">
+                  {finalSynthesis}
+                </div>
+              ) : (
+                <p className="text-[13px] text-deep-300 italic">
+                  Opus 正在阅读所有 cycle 的综合，撰写跨周期演化分析…
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Feature 1: Epistemic Divergence Heatmap */}
           {isPhilosophical && cycles.some((c) => c.stanceMatrix) && (
@@ -703,7 +1020,7 @@ function FeatureToggle({
   description: string;
   enabled: boolean;
   onToggle: (v: boolean) => void;
-  color: 'red' | 'blue' | 'amber';
+  color: 'red' | 'blue' | 'amber' | 'purple';
 }) {
   const colorMap = {
     red: {
@@ -720,6 +1037,11 @@ function FeatureToggle({
       on: 'border-amber-300/25 bg-amber-300/8 text-amber-300/70',
       off: 'border-deep-400/12 bg-deep-700/20 text-deep-200/35',
       dot: 'bg-amber-300/60',
+    },
+    purple: {
+      on: 'border-purple-400/25 bg-purple-400/8 text-purple-400/70',
+      off: 'border-deep-400/12 bg-deep-700/20 text-deep-200/35',
+      dot: 'bg-purple-400/60',
     },
   };
 

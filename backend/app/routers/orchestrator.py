@@ -63,6 +63,7 @@ class AutoLoopRequest(BaseModel):
     adversarial: bool = False
     extract_stances: bool = False
     branching: bool = False
+    flip_stance: bool = False  # cycle ≥2: each persona argues against own tradition
 
 
 @router.post("/auto-loop")
@@ -88,6 +89,7 @@ async def run_auto_loop(req: AutoLoopRequest):
             adversarial=req.adversarial,
             extract_stances=req.extract_stances,
             branching=req.branching,
+            flip_stance=req.flip_stance,
         )
     )
 
@@ -97,6 +99,278 @@ async def cancel_auto_loop(session_id: str):
     """Cancel a running auto-loop session."""
     AutoLoopScheduler.cancel(session_id)
     return {"status": "cancellation_requested", "session_id": session_id}
+
+
+@router.get("/auto-loop/{session_id}/briefing")
+async def export_auto_loop_briefing(session_id: str):
+    """Render the auto-loop session as a self-contained markdown report
+    that includes EVERY persona statement in full, plus per-cycle synthesis."""
+    from pathlib import Path
+    import json as _json
+    from app.services.autonomous_debate import RUN_LOG_DIR
+
+    p: Path = RUN_LOG_DIR / f"auto-{session_id}.jsonl"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail=f"No log for auto-loop session {session_id}")
+
+    events = []
+    with p.open() as f:
+        for line in f:
+            try:
+                events.append(_json.loads(line))
+            except _json.JSONDecodeError:
+                continue
+
+    seed = ""
+    mode = ""
+    cycles: dict[int, dict] = {}
+    final_synthesis = ""
+    final_meta = {}
+
+    for ev in events:
+        t, d = ev.get("type"), ev.get("data", {})
+        if t == "auto_start":
+            seed = d.get("seed_hypothesis", "")
+            mode = d.get("mode", "")
+        elif t == "cycle_start":
+            cycles[d.get("cycle_num") or d.get("cycle") or 0] = {
+                "cycle": d.get("cycle_num") or d.get("cycle"),
+                "hypothesis": d.get("hypothesis", ""),
+                "personas": [],
+                "stance_matrix": None,
+                "synthesis": "",
+                "next_hypothesis": "",
+                "errors": [],
+            }
+        elif t == "phil_persona_complete":
+            cycle_num = d.get("cycle")
+            c = cycles.setdefault(cycle_num, {"cycle": cycle_num, "personas": []})
+            c.setdefault("personas", []).append({
+                "id": d.get("persona_id"),
+                "name": d.get("persona_name"),
+                "model": d.get("model", ""),
+                "content": d.get("content", ""),
+            })
+        elif t == "phil_persona_error":
+            c = cycles.setdefault(d.get("cycle"), {"cycle": d.get("cycle"), "personas": [], "errors": []})
+            c.setdefault("errors", []).append(d)
+        elif t == "phil_synthesis_done":
+            c = cycles.setdefault(d.get("cycle"), {"cycle": d.get("cycle")})
+            c["synthesis"] = d.get("synthesis", "")
+            c["judge_model"] = d.get("model", "")
+        elif t == "phil_stance_matrix":
+            c = cycles.setdefault(d.get("cycle"), {"cycle": d.get("cycle")})
+            c["stance_matrix"] = d.get("matrix")
+        elif t == "next_hypothesis":
+            c = cycles.setdefault(d.get("cycle"), {"cycle": d.get("cycle")})
+            c["next_hypothesis"] = d.get("next_hypothesis", "")
+        elif t == "final_synth_done":
+            final_synthesis = d.get("final_synthesis", "") or final_synthesis
+        elif t == "auto_complete":
+            final_meta = d
+            if not final_synthesis:
+                final_synthesis = d.get("final_synthesis", "")
+
+    md: list[str] = [
+        f"# 自主探索 · {mode or '辩论'} 简报 · `{session_id}`",
+        "",
+        f"**种子假设**：{seed}",
+        "",
+        f"**总览**：{len(cycles)} cycle · 终止原因 `{final_meta.get('stopped_reason','?')}`",
+        "",
+        "---",
+    ]
+
+    for cycle_num in sorted(cycles.keys()):
+        c = cycles[cycle_num]
+        md.append(f"## Cycle {cycle_num}")
+        md.append(f"**当轮假设**：{c.get('hypothesis', seed)}")
+        md.append("")
+        md.append("### 各 persona 完整发言")
+        for p_ in (c.get("personas") or []):
+            md.append("")
+            md.append(f"#### {p_['name']}  · `{p_.get('model','?')}`")
+            md.append("")
+            md.append((p_.get("content") or "").strip() or "_(空)_")
+        if c.get("errors"):
+            md.append("")
+            md.append("### ⚠ 错误")
+            for e in c["errors"]:
+                md.append(f"- **{e.get('persona_name','?')}** ({e.get('model','?')}): `{e.get('error','')[:200]}`")
+        if c.get("synthesis"):
+            md.append("")
+            md.append(f"### ⚖ 综合（裁判：`{c.get('judge_model','?')}`）")
+            md.append("")
+            md.append(c["synthesis"])
+        if c.get("stance_matrix"):
+            sm = c["stance_matrix"]
+            md.append("")
+            md.append("### 📊 立场矩阵（认知分歧）")
+            args = sm.get("arguments") or []
+            md.append("")
+            md.append("| Argument | " + " | ".join(sm.get("stances", {}).keys()) + " |")
+            md.append("|---" + "|---" * len(sm.get("stances", {})) + "|")
+            for i, arg in enumerate(args):
+                row = [arg]
+                for v in sm.get("stances", {}).values():
+                    val = v[i] if i < len(v) else 0
+                    row.append(f"{val:+.1f}")
+                md.append("| " + " | ".join(row) + " |")
+        if c.get("next_hypothesis"):
+            md.append("")
+            md.append(f"**→ 下一假设**：{c['next_hypothesis']}")
+        md.append("")
+        md.append("---")
+
+    if final_synthesis:
+        md.append("")
+        md.append("## 🎯 最终综合")
+        md.append("")
+        md.append(final_synthesis)
+
+    return {"session_id": session_id, "markdown": "\n".join(md)}
+
+
+# ─── Topic utilities ──────────────────────────────────────
+
+@router.post("/topic/critique")
+async def critique_topic(body: dict):
+    """Pre-flight topic review by Haiku/cheap tier. Returns 3 issues +
+    a suggested rewrite + a complexity score 0–10. Costs ~$0.001 per call."""
+    import json as _json, re as _re
+    from app.core.inference import get_cheap_backend
+    from app.services.autonomous_debate import AutonomousDebateService
+
+    topic = (body.get("topic") or "").strip()
+    if not topic:
+        raise HTTPException(400, "topic required")
+
+    backend = get_cheap_backend(_autonomous.tracker)
+    system = (
+        "你是一位严苛的议题预审员。任务：检查一个 what-if 议题在送进辩论引擎前是否需要修改。\n"
+        "输出严格 JSON：{issues: [≤3 条 ≤25字], suggested_rewrite: 1 句优化版议题（≤60字）, "
+        "complexity_score: 0-10（0=极简单，10=过度复杂应拆分）, ready_to_run: bool}\n"
+        "判断维度：\n"
+        "  · 是否过于宏大、变量过多？（→ 应拆分）\n"
+        "  · 是否隐含了未声明的前提？（→ 应明确）\n"
+        "  · 措辞是否含糊（如「成功」「快乐」等抽象词未定义）？\n"
+        "不要任何额外解释，仅输出 JSON。"
+    )
+    try:
+        raw = await backend.complete(
+            system_prompt=system,
+            messages=[{"role": "user", "content": f"议题：{topic}"}],
+            max_tokens=400, temperature=0.3,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"critique backend error: {e}")
+    # Extract JSON tolerantly
+    raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+    raw = _re.sub(r"```\s*$", "", raw)
+    m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if not m:
+        return {"issues": [], "suggested_rewrite": topic, "complexity_score": 5,
+                "ready_to_run": True, "raw": raw[:200]}
+    try:
+        parsed = _json.loads(m.group(0))
+    except _json.JSONDecodeError:
+        return {"issues": [], "suggested_rewrite": topic, "complexity_score": 5,
+                "ready_to_run": True, "raw": raw[:200]}
+    return {
+        "issues": [str(x)[:60] for x in (parsed.get("issues") or [])][:5],
+        "suggested_rewrite": str(parsed.get("suggested_rewrite", topic))[:200],
+        "complexity_score": max(0, min(10, int(parsed.get("complexity_score", 5) or 5))),
+        "ready_to_run": bool(parsed.get("ready_to_run", True)),
+    }
+
+
+@router.post("/topic/decompose")
+async def decompose_topic(body: dict):
+    """Break a multi-variable topic into focused sub-topics. Uses judge tier
+    (Sonnet/DeepSeek) since the decomposition matters."""
+    import json as _json, re as _re
+    from app.core.inference import get_judge_backend
+    from app.services.autonomous_debate import AutonomousDebateService
+
+    topic = (body.get("topic") or "").strip()
+    if not topic:
+        raise HTTPException(400, "topic required")
+
+    backend = get_judge_backend(_autonomous.tracker)
+    system = (
+        "你是一位议题拆解专家。如果用户提的议题包含多个独立变量（例如同时假设 A、B、C），"
+        "把它拆解成 2-4 个**独立可单跑**的子议题，每个聚焦一个变量。"
+        "如果议题已足够单一，sub_topics 返回原议题（即只有一个元素）。\n\n"
+        "输出严格 JSON：{is_compound: bool, reasoning: ≤50字, "
+        "sub_topics: [{title: ≤30字, hypothesis: 完整假设句}, ...]}\n"
+        "拆解时保持中文简洁，不要拼凑。仅输出 JSON。"
+    )
+    try:
+        raw = await backend.complete(
+            system_prompt=system,
+            messages=[{"role": "user", "content": f"议题：{topic}"}],
+            max_tokens=900, temperature=0.3,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"decompose backend error: {e}")
+    raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+    raw = _re.sub(r"```\s*$", "", raw)
+    m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if not m:
+        return {"is_compound": False, "reasoning": "解析失败",
+                "sub_topics": [{"title": topic[:30], "hypothesis": topic}]}
+    try:
+        parsed = _json.loads(m.group(0))
+    except _json.JSONDecodeError:
+        return {"is_compound": False, "reasoning": "JSON 错误",
+                "sub_topics": [{"title": topic[:30], "hypothesis": topic}]}
+    subs = []
+    for s in (parsed.get("sub_topics") or [])[:4]:
+        if isinstance(s, dict):
+            subs.append({
+                "title": str(s.get("title", ""))[:50],
+                "hypothesis": str(s.get("hypothesis", ""))[:300],
+            })
+    if not subs:
+        subs = [{"title": topic[:30], "hypothesis": topic}]
+    return {
+        "is_compound": bool(parsed.get("is_compound", False)),
+        "reasoning": str(parsed.get("reasoning", ""))[:120],
+        "sub_topics": subs,
+    }
+
+
+@router.get("/auto-loop/_logs")
+async def list_auto_loop_logs():
+    """List all auto-loop session log files (newest first), with metadata."""
+    from app.services.autonomous_debate import RUN_LOG_DIR
+    import json as _json
+    items = []
+    for p in sorted(RUN_LOG_DIR.glob("auto-*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True):
+        seed, mode, cycles = "", "", 0
+        try:
+            with p.open() as f:
+                for line in f:
+                    try: ev = _json.loads(line)
+                    except _json.JSONDecodeError: continue
+                    t = ev.get("type")
+                    d = ev.get("data", {})
+                    if t == "auto_start":
+                        seed = d.get("seed_hypothesis", "")
+                        mode = d.get("mode", "")
+                    elif t == "cycle_complete":
+                        cycles += 1
+        except Exception:
+            pass
+        items.append({
+            "session_id": p.stem.replace("auto-", ""),
+            "seed_hypothesis": seed,
+            "mode": mode,
+            "cycles": cycles,
+            "size_bytes": p.stat().st_size,
+            "mtime": int(p.stat().st_mtime),
+        })
+    return {"sessions": items}
 
 
 # ─── Autonomous Topic Explorer ──────────────────────────────

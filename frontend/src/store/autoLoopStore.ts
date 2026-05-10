@@ -45,6 +45,8 @@ interface AutoLoopState {
   cycles: CycleState[];
   evolutionChain: string[];
   stoppedReason: string;
+  finalSynthesis: string;       // cross-cycle Opus meta-synthesis
+  finalSynthPending: boolean;
 
   // Philosophical mode — active persona
   activePersonaId: string | null;
@@ -81,6 +83,8 @@ const initialState = {
   cycles: [] as CycleState[],
   evolutionChain: [] as string[],
   stoppedReason: '',
+  finalSynthesis: '',
+  finalSynthPending: false,
   activePersonaId: null as string | null,
   adversarial: false,
   extractStances: false,
@@ -269,11 +273,24 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
             });
             break;
 
+          case 'final_synth_start':
+            set({ finalSynthPending: true });
+            break;
+
+          case 'final_synth_done':
+            set({
+              finalSynthesis: (event.data.final_synthesis as string) || '',
+              finalSynthPending: false,
+            });
+            break;
+
           case 'auto_complete':
             set({
               status: 'complete',
               stoppedReason: event.data.stopped_reason as string,
               evolutionChain: event.data.evolution_chain as string[],
+              finalSynthesis: (event.data.final_synthesis as string) || get().finalSynthesis,
+              finalSynthPending: false,
             });
             break;
 

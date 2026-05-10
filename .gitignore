@@ -25,6 +25,10 @@ frontend/dist/
 *.swo
 .DS_Store
 
+# Symlinks to centralized logs (created by scripts/log-link.sh)
+.logs
+.runs
+
 # Docker
 *.log
 

@@ -57,15 +57,40 @@ p, span, div { line-height: inherit; }
   background: rgba(20, 17, 15, 0.72);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(232, 185, 136, 0.12);
+  border: 1px solid rgba(232, 185, 136, 0.16);
 }
 
 .glass-subtle {
   background: rgba(20, 17, 15, 0.45);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(232, 185, 136, 0.08);
+  border: 1px solid rgba(232, 185, 136, 0.10);
 }
+
+/* ──── Design Tokens — semantic utility layer ────
+   These give us a single knob to tune contrast across the whole app.
+   Use these instead of ad-hoc /[0.06], /15, /35 values. */
+
+/* Borders — three weights, all amber-tinted */
+.tk-border-faint    { border-color: rgba(232, 185, 136, 0.14); }
+.tk-border          { border-color: rgba(232, 185, 136, 0.28); }
+.tk-border-strong   { border-color: rgba(232, 185, 136, 0.45); }
+
+/* Dividers — visible without dominating */
+.tk-divider-v       { width: 1px; background: rgba(180, 160, 130, 0.30); }
+.tk-divider-h       { height: 1px; background: rgba(180, 160, 130, 0.22); }
+
+/* Cool accent — for neutral/info data (token counts, judge labels, system metadata).
+   Balances the amber warmth so the UI doesn't feel monochromatic. */
+.tk-cool            { color: #8FA8C7; }
+.tk-cool-soft       { color: rgba(143, 168, 199, 0.78); }
+.tk-cool-bg         { background: rgba(143, 168, 199, 0.08); border-color: rgba(143, 168, 199, 0.30); }
+
+/* Text contrast tiers — replaces scattered /75, /85 etc. */
+.tk-text-primary    { color: #F2EDE7; }
+.tk-text-secondary  { color: rgba(218, 210, 200, 0.92); }
+.tk-text-muted      { color: rgba(181, 171, 160, 0.82); }
+.tk-text-faint      { color: rgba(181, 171, 160, 0.55); }
 
 /* ──── Border Effects ──── */
 .border-glow {

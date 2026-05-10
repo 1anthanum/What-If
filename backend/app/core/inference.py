@@ -119,7 +119,12 @@ class OllamaBackend(InferenceBackend):
         model: str = "qwen2.5:7b",
     ):
         self._tracker = tracker
-        self._base_url = base_url.rstrip("/")
+        # Defensive: empty base_url → use loopback default. Empty string would
+        # cause Request URL to be missing protocol later.
+        url = (base_url or "").rstrip("/")
+        if not url or not url.startswith(("http://", "https://")):
+            url = "http://localhost:11434"
+        self._base_url = url
         self._model = model
 
     async def complete(
@@ -266,6 +271,20 @@ class OpenAICompatibleBackend(InferenceBackend):
             out.append({"role": m["role"], "content": m["content"]})
         return out
 
+    def _is_strict_openai(self) -> bool:
+        """OpenAI's GPT-5 / o-series enforces stricter parameter rules:
+        - `max_tokens` → must be `max_completion_tokens`
+        - `temperature` → only the default 1 is allowed
+        """
+        return self._provider == "openai" and self._model.startswith(("gpt-5", "o1", "o3"))
+
+    def _token_field(self) -> str:
+        return "max_completion_tokens" if self._is_strict_openai() else "max_tokens"
+
+    def _coerce_temperature(self, t: float) -> float:
+        # GPT-5 / o-series rejects any non-default temperature.
+        return 1.0 if self._is_strict_openai() else t
+
     async def complete(
         self,
         system_prompt: str,
@@ -274,13 +293,18 @@ class OpenAICompatibleBackend(InferenceBackend):
         temperature: float = 0.7,
     ) -> str:
         import httpx
-        body = {
+        body: dict = {
             "model": self._model,
             "messages": self._build_messages(system_prompt, messages),
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+            self._token_field(): max_tokens,
+            "temperature": self._coerce_temperature(temperature),
             "stream": False,
         }
+        # GPT-5 / o-series spends a lot of tokens on hidden reasoning before
+        # producing visible content — set reasoning_effort=low so most of the
+        # max_tokens budget goes to the actual answer.
+        if self._is_strict_openai():
+            body["reasoning_effort"] = "low"
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 resp = await client.post(
@@ -288,6 +312,13 @@ class OpenAICompatibleBackend(InferenceBackend):
                     headers=self._headers(),
                     json=body,
                 )
+                if resp.status_code >= 400:
+                    # Capture body before raising — providers often put the
+                    # actual reason (bad model name, content policy, …) here.
+                    err_body = resp.text[:600]
+                    logger.error(
+                        f"{self._provider} {self._model} HTTP {resp.status_code}: {err_body}"
+                    )
                 resp.raise_for_status()
                 data = resp.json()
             msg = data.get("choices", [{}])[0].get("message", {}) or {}
@@ -313,13 +344,15 @@ class OpenAICompatibleBackend(InferenceBackend):
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         import httpx, json as _json
-        body = {
+        body: dict = {
             "model": self._model,
             "messages": self._build_messages(system_prompt, messages),
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+            self._token_field(): max_tokens,
+            "temperature": self._coerce_temperature(temperature),
             "stream": True,
         }
+        if self._is_strict_openai():
+            body["reasoning_effort"] = "low"
         prompt_tokens = 0
         completion_tokens = 0
         try:
@@ -330,6 +363,11 @@ class OpenAICompatibleBackend(InferenceBackend):
                     headers=self._headers(),
                     json=body,
                 ) as resp:
+                    if resp.status_code >= 400:
+                        err_body = (await resp.aread())[:600].decode("utf-8", errors="replace")
+                        logger.error(
+                            f"{self._provider} {self._model} stream HTTP {resp.status_code}: {err_body}"
+                        )
                     resp.raise_for_status()
                     async for line in resp.aiter_lines():
                         if not line:

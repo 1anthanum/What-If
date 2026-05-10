@@ -4,9 +4,11 @@ import { DebateRoom } from './components/debate/DebateRoom';
 import { CausalView } from './components/causal/CausalView';
 import { CounterfactualView } from './components/counterfactual/CounterfactualView';
 import { FeedbackLoopView } from './components/orchestrator/FeedbackLoopView';
+import { VotingHall } from './components/voting/VotingHall';
 import { CostBadge } from './components/common/CostBadge';
 import { CumulativeCostBadge } from './components/common/CumulativeCostBadge';
 import { SettingsPanel } from './components/common/SettingsPanel';
+import { Button } from './components/common/ui';
 import { useDebateStore } from './store/debateStore';
 import { useCausalStore } from './store/causalStore';
 import { useCounterfactualStore } from './store/counterfactualStore';
@@ -17,6 +19,7 @@ const MODULES = [
   { key: 'causal', label: '因果图谱', ready: true },
   { key: 'counterfactual', label: '历史反事实', ready: true },
   { key: 'orchestrator', label: '闭环推演', ready: true },
+  { key: 'voting', label: '模型投票厅', ready: true },
 ] as const;
 
 export default function App() {
@@ -73,61 +76,60 @@ export default function App() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <CumulativeCostBadge activeModule={activeModule} />
             <SettingsPanel />
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-deep-800/60 border border-deep-400/40">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-deep-800/60 border tk-border-faint">
               <span className="status-dot bg-electric" />
               <span className="text-[11px] font-mono uppercase tracking-[0.22em] glow-electric font-semibold">
                 ONLINE
               </span>
             </div>
             {hasActiveSession && (
-              <button
-                onClick={handleReset}
-                className="text-[12px] font-mono tracking-[0.18em] text-deep-100 hover:text-amber-300 transition-colors px-3.5 py-1.5 border border-deep-400/45 rounded-md hover:border-amber-300/55 hover:bg-amber-300/[0.04]"
-              >
+              <Button onClick={handleReset} variant="secondary" size="sm">
                 ＋ NEW
-              </button>
+              </Button>
             )}
           </div>
         </div>
       </header>
 
       {/* Module Tabs */}
-      <nav className="relative z-10 border-b border-deep-400/35 bg-deep-800/50 backdrop-blur-sm">
+      <nav className="relative z-10 border-b tk-border-faint bg-deep-800/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-7 flex items-end gap-1">
-          {MODULES.map((tab, i) => (
-            <button
-              key={tab.key}
-              disabled={!tab.ready}
-              onClick={() => tab.ready && setActiveModule(tab.key)}
-              className={`
-                relative py-4 px-6 text-[15px] tracking-[0.04em] font-medium transition-all duration-200
-                ${activeModule === tab.key
-                  ? 'text-amber-200'
-                  : 'text-deep-200 hover:text-deep-50'
-                }
-                ${!tab.ready ? 'cursor-not-allowed opacity-30' : ''}
-              `}
-            >
-              <span className="font-mono text-[10px] text-deep-300/75 mr-2 align-middle">
-                {String(i + 1).padStart(2, '0')}
-              </span>
-              {tab.label}
-              {activeModule === tab.key && (
-                <>
-                  <span className="absolute -bottom-px left-3 right-3 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
-                  <span className="absolute inset-0 bg-gradient-to-b from-amber-300/[0.06] to-transparent pointer-events-none" />
-                </>
-              )}
-              {!tab.ready && (
-                <span className="ml-1.5 text-[10px] font-mono text-deep-300/65 border border-deep-400/40 px-1.5 py-0.5 rounded">
-                  SOON
+          {MODULES.map((tab, i) => {
+            const active = activeModule === tab.key;
+            return (
+              <button
+                key={tab.key}
+                disabled={!tab.ready}
+                onClick={() => tab.ready && setActiveModule(tab.key)}
+                className={`
+                  relative py-4 px-5 text-[14px] tracking-[0.04em] font-medium transition-all duration-200
+                  focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-300/40 focus-visible:rounded
+                  ${active ? 'text-amber-200' : 'tk-text-secondary hover:text-deep-50'}
+                  ${!tab.ready ? 'cursor-not-allowed opacity-30' : ''}
+                `}
+                aria-current={active ? 'page' : undefined}
+              >
+                <span className={`font-mono text-[10px] mr-2 align-middle tabular-nums ${active ? 'text-amber-300/85' : 'tk-cool-soft'}`}>
+                  {String(i + 1).padStart(2, '0')}
                 </span>
-              )}
-            </button>
-          ))}
+                {tab.label}
+                {active && (
+                  <>
+                    <span className="absolute -bottom-px left-3 right-3 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
+                    <span className="absolute inset-0 bg-gradient-to-b from-amber-300/[0.06] to-transparent pointer-events-none" />
+                  </>
+                )}
+                {!tab.ready && (
+                  <span className="ml-1.5 text-[10px] font-mono tk-text-faint border tk-border-faint px-1.5 py-0.5 rounded">
+                    SOON
+                  </span>
+                )}
+              </button>
+            );
+          })}
           {/* Active-module mini cost badge — shows current module's spend without distracting from total */}
           <div className="ml-auto py-3 hidden md:block">
             {tokenUsage && <CostBadge usage={tokenUsage as any} />}
@@ -162,12 +164,17 @@ export default function App() {
         {activeModule === 'orchestrator' && (
           <FeedbackLoopView />
         )}
+
+        {/* Voting Hall — model panel votes on a structured question */}
+        {activeModule === 'voting' && (
+          <VotingHall />
+        )}
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-deep-400/30 py-4 text-center">
-        <p className="text-[15px] font-mono text-deep-300/55 tracking-[0.15em]">
-          POWERED BY CLAUDE API — REAL-TIME TOKEN TRACKING
+      <footer className="relative z-10 border-t tk-border-faint py-4 text-center">
+        <p className="text-[10px] font-mono tk-text-faint tracking-[0.22em]">
+          POWERED BY CLAUDE API · REAL-TIME TOKEN TRACKING
         </p>
       </footer>
     </div>

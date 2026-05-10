@@ -46,6 +46,14 @@ export default {
           danger: '#C47D5A',
           info: '#8B9FBF',
         },
+        // Cool accent — single hue for neutral/info data (balances amber).
+        // Use sparingly: token counts, model labels, judge metadata, system status.
+        cool: {
+          200: '#C7D4E5',
+          300: '#A8BCD8',
+          400: '#8FA8C7',
+          500: '#7591B5',
+        },
       },
       fontFamily: {
         mono: ['"JetBrains Mono"', '"Fira Code"', 'Menlo', 'monospace'],

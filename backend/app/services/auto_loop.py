@@ -32,6 +32,34 @@ from app.schemas.debate import DebateStartRequest
 logger = logging.getLogger(__name__)
 
 # Philosophical personas — each holds a distinct tradition
+# Smart persona × model pairing — picks the provider best-suited for each
+# persona's intellectual tradition. Falls back to round-robin if the preferred
+# provider isn't in the configured persona_pool.
+PERSONA_MODEL_PREFERENCE = {
+    "rationalist":         "openai",      # analytic philosophy — Western precision
+    "existentialist":      "claude",       # reflective / thoughtful prose
+    "pragmatist":          "openai",       # American pragmatism
+    "eastern_philosopher": "deepseek",     # strongest at Chinese classical citations
+    "critical_theorist":   "glm",          # social-science critique training
+    "adversary":           "openai",       # GPT-5 reasoning is sharpest at finding flaws
+}
+
+
+def _smart_persona_backend(tracker, persona_id: str, fallback_idx: int):
+    """Pick the configured pool spec whose provider matches PERSONA_MODEL_PREFERENCE.
+    Fall back to round-robin from get_backend_for_persona on miss."""
+    from app.config import get_settings
+    from app.core.inference import get_backend_from_spec, get_backend_for_persona
+    preferred = PERSONA_MODEL_PREFERENCE.get(persona_id)
+    pool_str = getattr(get_settings(), "persona_pool", "")
+    if preferred and pool_str:
+        for spec in pool_str.split(","):
+            spec = spec.strip()
+            if spec.startswith(f"{preferred}:"):
+                return get_backend_from_spec(spec, tracker)
+    return get_backend_for_persona(tracker, fallback_idx)
+
+
 PHILOSOPHICAL_PERSONAS = [
     {
         "id": "rationalist",
@@ -124,6 +152,7 @@ class AutoLoopResult:
         self.total_cycles: int = 0
         self.stopped_reason: str = ""  # "converged" | "max_cycles" | "cancelled" | "error"
         self.evolution_chain: list[str] = []  # hypothesis chain
+        self.final_synthesis: str = ""  # cross-cycle meta-synthesis (Opus)
 
 
 class AutoLoopScheduler:
@@ -154,6 +183,54 @@ class AutoLoopScheduler:
         adversarial: bool = False,
         extract_stances: bool = False,
         branching: bool = False,
+        flip_stance: bool = False,
+    ) -> AsyncGenerator[dict, None]:
+        """Outer wrapper: tee every SSE event to a per-session JSONL log
+        for offline analysis / report export. Inner generator does the work."""
+        import json as _json
+        import time as _time
+        from app.services.autonomous_debate import RUN_LOG_DIR
+
+        gen = self._run_impl(
+            seed_hypothesis, max_cycles, mode, event_id, max_iterations_per_loop,
+            time_horizon, adversarial, extract_stances, branching, flip_stance,
+        )
+        # Buffer first event to learn session_id, then start writing log
+        first_ev = None
+        async for ev in gen:
+            first_ev = ev
+            break
+        sid = (first_ev or {}).get("data", {}).get("session_id") or "unknown"
+        log_path = RUN_LOG_DIR / f"auto-{sid}.jsonl"
+        log_fh = log_path.open("w", buffering=1)
+        start_ts = _time.time()
+        def _write(ev: dict):
+            try:
+                log_fh.write(_json.dumps({"t_ms": int((_time.time() - start_ts) * 1000), **ev}, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+        try:
+            if first_ev is not None:
+                _write(first_ev)
+                yield first_ev
+            async for ev in gen:
+                _write(ev)
+                yield ev
+        finally:
+            log_fh.close()
+
+    async def _run_impl(
+        self,
+        seed_hypothesis: str,
+        max_cycles: int | None = None,
+        mode: str = "historical",
+        event_id: str = "",
+        max_iterations_per_loop: int = 2,
+        time_horizon: str = "30 years",
+        adversarial: bool = False,
+        extract_stances: bool = False,
+        branching: bool = False,
+        flip_stance: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """Run autonomous exploration cycles.
 
@@ -213,6 +290,7 @@ class AutoLoopScheduler:
                         result.evolution_chain,
                         adversarial=adversarial,
                         extract_stances=extract_stances,
+                        flip_stance=flip_stance,
                     ):
                         # ev is a dict from sse_event(): {"type": ..., "data": ...}
                         ev_type = ev.get("type", "")
@@ -341,14 +419,73 @@ class AutoLoopScheduler:
 
         result.total_cycles = len(result.cycles)
 
+        # ── Cross-cycle meta-synthesis (Opus): only worth the cost when we
+        # actually have ≥2 cycles. Single-cycle runs already have a synthesis.
+        final_synthesis = ""
+        if mode == "philosophical" and len(result.cycles) >= 2:
+            yield sse_event("final_synth_start", {"session_id": session_id})
+            final_synthesis = await self._meta_synthesize_across_cycles(
+                seed_hypothesis, result.cycles,
+            )
+            yield sse_event("final_synth_done", {
+                "session_id": session_id,
+                "final_synthesis": final_synthesis,
+            })
+        result.final_synthesis = final_synthesis
+
         yield sse_event("auto_complete", {
             "session_id": session_id,
             "mode": mode,
             "total_cycles": result.total_cycles,
             "stopped_reason": result.stopped_reason,
             "evolution_chain": result.evolution_chain,
+            "final_synthesis": final_synthesis,
             "token_usage": self.tracker.get_summary() if hasattr(self.tracker, 'get_summary') else {},
         })
+
+    async def _meta_synthesize_across_cycles(
+        self,
+        seed_hypothesis: str,
+        cycles: list,
+    ) -> str:
+        """Opus reads every cycle's per-cycle synthesis + evolution chain,
+        produces a single meta-narrative that traces how thinking evolved
+        across the run. Higher-quality than just stitching summaries.
+        """
+        from app.core.inference import get_decider_backend
+        backend = get_decider_backend(self.tracker)
+        cycles_block = "\n\n".join(
+            f"## Cycle {c.cycle}：{c.hypothesis}\n{c.synthesis or '(无)'}"
+            for c in cycles if c.synthesis
+        )
+        chain_block = " → ".join(
+            f"C{c.cycle}: {c.hypothesis[:50]}" for c in cycles
+        )
+        system = (
+            "你是一位顶级哲学评论家。"
+            "你正在为一场跨多 cycle 的自主辩论撰写终评。"
+            "要求：800 字以内，分四节 — \n"
+            "1) 核心洞见演化轨迹（如何从 cycle 1 推进到最后）\n"
+            "2) 不可调和的核心分歧（不同流派的根本冲突）\n"
+            "3) 被这场对话揭示的盲区或新问题（每位 persona 都没看到的）\n"
+            "4) 给读者的实操启示（不要空话）\n"
+            "中文输出，禁用套话。"
+        )
+        user = (
+            f"原始议题：{seed_hypothesis}\n\n"
+            f"假设演化链：{chain_block}\n\n"
+            f"各 cycle 综合：\n{cycles_block}"
+        )
+        try:
+            return await backend.complete(
+                system_prompt=system,
+                messages=[{"role": "user", "content": user}],
+                max_tokens=1800,
+                temperature=0.4,
+            )
+        except Exception as e:
+            logger.error(f"meta synthesis failed: {e}")
+            return f"[元综合失败：{e}]"
 
     # ─── Philosophical Mode: Debate-Only Cycle ───────────────────
 
@@ -360,6 +497,7 @@ class AutoLoopScheduler:
         chain: list[str],
         adversarial: bool = False,
         extract_stances: bool = False,
+        flip_stance: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """One cycle of philosophical debate:
         5 personas each give their perspective → (optional adversarial) → synthesis.
@@ -388,7 +526,9 @@ class AutoLoopScheduler:
         personas_to_run = PHILOSOPHICAL_PERSONAS[:4] if adversarial else PHILOSOPHICAL_PERSONAS
 
         for idx, persona in enumerate(personas_to_run):
-            backend = get_backend_for_persona(self.tracker, idx)
+            # Smart pairing: pick provider best-suited for this persona's
+            # tradition. Falls back to round-robin if pool doesn't have it.
+            backend = _smart_persona_backend(self.tracker, persona["id"], idx)
             model_name = backend.backend_name()
 
             yield sse_event("phil_persona_start", {
@@ -400,24 +540,49 @@ class AutoLoopScheduler:
                 "is_adversarial": False,
             })
 
+            flip_directive = ""
+            if flip_stance and cycle_num >= 2:
+                flip_directive = (
+                    "\n\n⚡ **立场反转模式**（本轮强制）：\n"
+                    "你必须**论证与你的哲学传统通常持有立场相反的观点**。例如：\n"
+                    "  - 理性主义者要论证'直觉与情感优先于逻辑'\n"
+                    "  - 存在主义者要论证'本质先于存在、意义被预定'\n"
+                    "  - 实用主义者要论证'纯粹真理高于实用效果'\n"
+                    "  - 东方哲学家要论证'分析与对立优于整体调和'\n"
+                    "  - 批判理论家要论证'既有结构合理且应保留'\n"
+                    "目的不是戏谑反对，而是**找出反方立场里真正合理的部分**，"
+                    "证明你能跳出自身传统的认知边界。这是检验思想韧性的方式。\n"
+                )
             user_prompt = (
                 f"{history_context}"
                 f"当前问题：{question}\n\n"
                 f"请从你的哲学立场出发，对这个问题给出你的分析和立场。"
                 f"如果你与其他思想流派存在根本分歧，请明确指出分歧所在。"
+                f"{flip_directive}"
             )
 
             full_response: list[str] = []
-            async for chunk in backend.stream(
-                system_prompt=persona["system_prompt"],
-                messages=[{"role": "user", "content": user_prompt}],
-                max_tokens=600,
-            ):
-                full_response.append(chunk)
-                yield sse_event("phil_persona_chunk", {
+            try:
+                async for chunk in backend.stream(
+                    system_prompt=persona["system_prompt"],
+                    messages=[{"role": "user", "content": user_prompt}],
+                    max_tokens=900,  # bumped from 600 — DeepSeek / GLM often hit ceiling
+                ):
+                    full_response.append(chunk)
+                    yield sse_event("phil_persona_chunk", {
+                        "cycle": cycle_num,
+                        "persona_id": persona["id"],
+                        "text": chunk,
+                    })
+            except Exception as e:
+                logger.error(f"persona {persona['id']} ({model_name}) failed: {e}")
+                full_response = [f"[模型 {model_name} 调用失败：{type(e).__name__}]"]
+                yield sse_event("phil_persona_error", {
                     "cycle": cycle_num,
                     "persona_id": persona["id"],
-                    "text": chunk,
+                    "persona_name": persona["name"],
+                    "model": model_name,
+                    "error": str(e)[:300],
                 })
 
             content = "".join(full_response)
@@ -431,13 +596,14 @@ class AutoLoopScheduler:
                 "cycle": cycle_num,
                 "persona_id": persona["id"],
                 "persona_name": persona["name"],
+                "model": model_name,
                 "content": content,
             })
 
         # Phase 2: Adversarial pass — devil's advocate reads all responses and attacks
         if adversarial:
             adversary = PHILOSOPHICAL_PERSONAS[4]  # critical_theorist
-            backend = get_backend_for_persona(self.tracker, 4)
+            backend = _smart_persona_backend(self.tracker, "adversary", 4)
             model_name = backend.backend_name()
 
             yield sse_event("phil_persona_start", {
@@ -460,16 +626,27 @@ class AutoLoopScheduler:
             )
 
             full_response: list[str] = []
-            async for chunk in backend.stream(
-                system_prompt=ADVERSARIAL_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": adversarial_user}],
-                max_tokens=800,
-            ):
-                full_response.append(chunk)
-                yield sse_event("phil_persona_chunk", {
+            try:
+                async for chunk in backend.stream(
+                    system_prompt=ADVERSARIAL_SYSTEM_PROMPT,
+                    messages=[{"role": "user", "content": adversarial_user}],
+                    max_tokens=1500,  # adversary attacks all 4 personas — needs room
+                ):
+                    full_response.append(chunk)
+                    yield sse_event("phil_persona_chunk", {
+                        "cycle": cycle_num,
+                        "persona_id": "adversary",
+                        "text": chunk,
+                    })
+            except Exception as e:
+                logger.error(f"adversary ({model_name}) failed: {e}")
+                full_response = [f"[模型 {model_name} 调用失败：{type(e).__name__}]"]
+                yield sse_event("phil_persona_error", {
                     "cycle": cycle_num,
                     "persona_id": "adversary",
-                    "text": chunk,
+                    "persona_name": "魔鬼代言人",
+                    "model": model_name,
+                    "error": str(e)[:300],
                 })
 
             adv_content = "".join(full_response)

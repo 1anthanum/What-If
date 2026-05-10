@@ -2,7 +2,31 @@
  * API client for the What-If Simulation backend.
  */
 
-const BASE_URL = '/api';
+// Always use an absolute URL. Going direct to the backend works in every
+// embed context (normal browser, VS Code webview, IDE iframe, file://) and
+// the backend already CORS-allows http://localhost:5173 / :3000.
+// If you deploy to production, change this via VITE_BACKEND_URL env var.
+const BACKEND_HOST =
+  // @ts-ignore — vite-style env access
+  (import.meta as any).env?.VITE_BACKEND_URL ||
+  (typeof window !== 'undefined' && window.location.hostname && window.location.protocol.startsWith('http')
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : 'http://localhost:8000');
+const BASE_URL = `${BACKEND_HOST}/api`;
+
+// Safety belt: any URL that escapes the helpers below missing the scheme
+// gets normalized so fetch never sees a relative path. Logs once at load.
+if (typeof window !== 'undefined') {
+  // eslint-disable-next-line no-console
+  console.log('[whatif] BASE_URL =', BASE_URL);
+}
+function ensureAbsolute(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  // path-relative or accidentally bare — prepend backend host
+  if (url.startsWith('/api/')) return `${BACKEND_HOST}${url}`;
+  if (url.startsWith('/')) return `${BACKEND_HOST}${url}`;
+  return `${BASE_URL}/${url.replace(/^\/+/, '')}`;
+}
 
 // ─── Debate Types ───────────────────────────────────────────
 
@@ -273,7 +297,7 @@ export interface SSEEvent {
 // ─── Shared Request Helper ──────────────────────────────────
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(ensureAbsolute(`${BASE_URL}${path}`), {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -296,7 +320,8 @@ export function createSSEStream(
   const controller = new AbortController();
 
   async function* streamEvents(): AsyncGenerator<SSEEvent> {
-    const res = await fetch(url, {
+    const finalUrl = ensureAbsolute(url);
+    const res = await fetch(finalUrl, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -627,6 +652,7 @@ export interface AutoLoopConfig {
   adversarial?: boolean;
   extract_stances?: boolean;
   branching?: boolean;
+  flip_stance?: boolean;
 }
 
 // ─── Epistemic Divergence Map Types ──────────────────────
@@ -745,4 +771,75 @@ export const autoLoopApi = {
    */
   getResult: (sessionId: string) =>
     request<AutoLoopResult>(`/orchestrator/auto-loop/${sessionId}`),
+
+  /**
+   * Auto-generated markdown briefing of the entire run, including every
+   * persona's complete statement, synthesis per cycle, and stance matrix.
+   */
+  getBriefing: (sessionId: string) =>
+    request<{ session_id: string; markdown: string }>(`/orchestrator/auto-loop/${sessionId}/briefing`),
+
+  listLogs: () =>
+    request<{ sessions: Array<{ session_id: string; seed_hypothesis: string; mode: string; cycles: number; mtime: number }> }>(
+      `/orchestrator/auto-loop/_logs`,
+    ),
+};
+
+// ─── Voting Hall API ──────────────────────────────────────
+
+export interface VotingConfig {
+  question: string;
+  context?: string;
+  vote_type: 'binary' | 'scale10';
+  mode: 'panel' | 'calibration' | 'matrix';
+  models?: string[];
+  calibration_model?: string;
+  votes_per_model?: number;
+  max_tokens?: number;
+  // Method flags (stack-able)
+  framing_flip?: boolean;
+  super_forecaster?: boolean;
+  role_framing?: boolean;
+  delphi?: boolean;
+  human_baseline?: boolean;
+  human_pre_vote?: string;
+}
+
+export const votingApi = {
+  runStream: (cfg: VotingConfig) =>
+    createSSEStream(`${BASE_URL}/voting/run`, {
+      method: 'POST',
+      body: JSON.stringify(cfg),
+    }),
+  getProfile: (model?: string) =>
+    request<{ models: Array<any>; log_count: number }>(
+      `/voting/profile${model ? `?model=${encodeURIComponent(model)}` : ''}`,
+    ),
+};
+
+// ─── Topic utility API (pre-flight critique + decompose) ──
+
+export interface TopicCritique {
+  issues: string[];
+  suggested_rewrite: string;
+  complexity_score: number;  // 0..10
+  ready_to_run: boolean;
+}
+export interface TopicDecomposition {
+  is_compound: boolean;
+  reasoning: string;
+  sub_topics: Array<{ title: string; hypothesis: string }>;
+}
+
+export const topicApi = {
+  critique: (topic: string) =>
+    request<TopicCritique>(`/orchestrator/topic/critique`, {
+      method: 'POST',
+      body: JSON.stringify({ topic }),
+    }),
+  decompose: (topic: string) =>
+    request<TopicDecomposition>(`/orchestrator/topic/decompose`, {
+      method: 'POST',
+      body: JSON.stringify({ topic }),
+    }),
 };

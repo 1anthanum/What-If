@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useDebateStore } from '../../store/debateStore';
+import { Button } from './ui';
 
 type Scenario = {
   title: string;
@@ -103,6 +104,10 @@ const DOMAIN_FILTERS = [
   { value: 'philosophy',   label: '哲学',  icon: '◈' },
 ];
 
+/** 3 hand-picked scenarios surfaced to first-time users — one tech, one
+ *  philosophical, one geopolitical, to hint at the breadth of the engine. */
+const FEATURED_TITLES = ['AGI 开源', '机器获意识权', '美元失去储备地位'];
+
 /** Highlight matched substring with amber. */
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query) return <>{text}</>;
@@ -127,6 +132,8 @@ export function ScenarioInput() {
   const [search, setSearch] = useState('');
   const [pickerCollapsed, setPickerCollapsed] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<Scenario | null>(null);
+  /** Browse mode: 'featured' shows 3 hand-picked cards; 'all' opens the full grid. */
+  const [browseMode, setBrowseMode] = useState<'featured' | 'all'>('featured');
   const { startDebate, status, error } = useDebateStore();
 
   const q = search.trim().toLowerCase();
@@ -173,15 +180,15 @@ export function ScenarioInput() {
   return (
     <div className="max-w-2xl mx-auto animate-fade-in">
       {/* Hero */}
-      <div className="text-center mb-14">
-        <div className="inline-flex items-center gap-2 text-[15px] font-mono text-amber-300/85 tracking-[0.2em] uppercase mb-5 px-3 py-1.5 border border-amber-300/35 rounded-full">
+      <div className="text-center mb-12">
+        <div className="inline-flex items-center gap-2 text-[10px] font-mono text-amber-300/95 tracking-[0.22em] uppercase mb-5 px-3 py-1.5 border border-amber-300/40 rounded-full">
           <span className="status-dot bg-amber-300 text-amber-300" />
           SCENARIO ENGINE
         </div>
         <h2 className="text-3xl font-light text-white mb-4 tracking-tight">
           如果<span className="text-amber-300">…</span>会怎样？
         </h2>
-        <p className="text-sm text-deep-200/85 max-w-sm mx-auto leading-relaxed">
+        <p className="text-[13px] tk-text-secondary max-w-md mx-auto leading-relaxed">
           输入一个假设场景，AI 将从多个立场展开辩论，帮你看清复杂系统的连锁反应。
         </p>
       </div>
@@ -244,137 +251,185 @@ export function ScenarioInput() {
       )}
       {!isCompact && (
       <div className="mb-10">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[15px] font-mono text-deep-200/85 uppercase tracking-[0.22em]">
-            预设场景
-          </p>
-          <div className="flex items-center gap-3">
-            <span className="text-[12px] font-mono text-deep-300/85 tracking-wider tabular-nums">
-              {visibleScenarios.length} / {EXAMPLE_SCENARIOS.length}
-            </span>
-            {selectedPreset && (
-              <button
-                type="button"
-                onClick={() => setPickerCollapsed(true)}
-                className="text-[12px] font-mono tracking-[0.18em] text-deep-200 hover:text-amber-300 transition-colors px-2 py-0.5 rounded border border-deep-400/45 hover:border-amber-300/55"
-                title="收起列表"
-              >
-                ▲ 收起
-              </button>
-            )}
-          </div>
-        </div>
+        {/* ─── Featured tier — surfaces 3 hand-picked scenarios. ─── */}
+        {browseMode === 'featured' && (
+          <div className="animate-fade-in">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[11px] font-mono text-amber-300/95 uppercase tracking-[0.22em]">
+                ◇ 精选场景
+              </p>
+              <div className="flex items-center gap-2">
+                <Button onClick={handleSurprise} variant="ghost" size="sm" title="随机抽一个">
+                  🎲 SURPRISE
+                </Button>
+                <Button onClick={() => setBrowseMode('all')} variant="ghost" size="sm">
+                  浏览全部 {EXAMPLE_SCENARIOS.length} →
+                </Button>
+              </div>
+            </div>
 
-        {/* Search + Surprise */}
-        <div className="flex gap-2 mb-3">
-          <div className="flex-1 relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-300/70 text-[14px] font-mono pointer-events-none">⌕</span>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="搜索场景 / 标签…  (例如 AI, 货币, 气候)"
-              className="w-full pl-8 pr-3 py-2 bg-deep-800/50 border border-deep-400/40 rounded-lg text-[14px] text-deep-50 placeholder-deep-300/65 focus:border-amber-300/55 transition-all"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-deep-300 hover:text-amber-300 text-[14px] px-1.5"
-                title="清空搜索"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={handleSurprise}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-300/[0.06] border border-amber-300/45 text-amber-200 hover:bg-amber-300/[0.12] hover:border-amber-300/65 hover:shadow-glow-sm transition-all text-[13px] font-mono tracking-[0.12em]"
-            title="随机选一个未见过的场景"
-          >
-            <span className="text-base">🎲</span>
-            SURPRISE
-          </button>
-        </div>
-
-        {/* Domain filter chips */}
-        <div className="flex flex-wrap gap-1.5 mb-3.5">
-          {DOMAIN_FILTERS.map(f => {
-            const active = filter === f.value;
-            const count = f.value === 'all'
-              ? EXAMPLE_SCENARIOS.length
-              : EXAMPLE_SCENARIOS.filter(s => s.domain === f.value).length;
-            return (
-              <button
-                key={f.value}
-                type="button"
-                onClick={() => setFilter(f.value)}
-                className={`
-                  flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-mono tracking-wider transition-all
-                  ${active
-                    ? 'bg-amber-300/[0.08] border border-amber-300/55 text-amber-200 shadow-glow-sm'
-                    : 'bg-deep-800/40 border border-deep-400/35 text-deep-200/85 hover:border-amber-300/35 hover:text-amber-300/85'
-                  }
-                `}
-              >
-                <span className={active ? 'text-amber-300' : 'text-deep-300'}>{f.icon}</span>
-                {f.label}
-                <span className={`text-[10px] tabular-nums ${active ? 'text-amber-300/85' : 'text-deep-300/70'}`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Scenario grid (or empty state) */}
-        {visibleScenarios.length === 0 ? (
-          <div className="glass-subtle rounded-lg p-8 text-center">
-            <p className="text-[14px] font-mono text-deep-200">未找到匹配场景</p>
-            <p className="text-[12px] font-mono text-deep-300 mt-1.5">
-              试试其它关键词，或点 🎲 SURPRISE 随机抽一个
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {visibleScenarios.map((ex, i) => (
-              <button
-                key={`${ex.domain}-${ex.title}-${i}`}
-                onClick={() => handleExampleClick(ex)}
-                className={`
-                  group text-left p-4 rounded-lg transition-all duration-300
-                  ${hypothesis === ex.hypothesis
-                    ? 'border-glow-active bg-amber-300/[0.05]'
-                    : 'glass-subtle hover:border-glow'
-                  }
-                `}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="text-amber-300/85 text-xl mt-0.5 font-mono shrink-0">{ex.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="text-[15px] font-medium text-deep-50 group-hover:text-amber-200 transition-colors block">
-                      <Highlight text={ex.title} query={search} />
-                    </span>
-                    <span className="block text-[13px] text-deep-200/85 mt-1 leading-relaxed">
-                      <Highlight text={ex.hypothesis} query={search} />
-                    </span>
-                    {ex.tags && ex.tags.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+              {FEATURED_TITLES.map(title => {
+                const ex = EXAMPLE_SCENARIOS.find(s => s.title === title);
+                if (!ex) return null;
+                const active = hypothesis === ex.hypothesis;
+                return (
+                  <button
+                    key={ex.title}
+                    onClick={() => handleExampleClick(ex)}
+                    className={`
+                      group text-left p-4 rounded-lg transition-all duration-300
+                      ${active ? 'border-glow-active bg-amber-300/[0.05]' : 'glass-subtle hover:border-glow'}
+                    `}
+                  >
+                    <div className="flex items-start gap-2.5 mb-2">
+                      <span className="text-amber-300 text-xl font-mono shrink-0 leading-none">{ex.icon}</span>
+                      <span className="text-[14px] font-medium tk-text-primary group-hover:text-amber-200 transition-colors">
+                        {ex.title}
+                      </span>
+                    </div>
+                    <p className="text-[12px] tk-text-secondary leading-relaxed line-clamp-3">
+                      {ex.hypothesis}
+                    </p>
+                    {ex.tags && (
                       <div className="flex gap-1 mt-2 flex-wrap">
                         {ex.tags.map(tag => (
-                          <span
-                            key={tag}
-                            className="text-[10px] font-mono tracking-wider px-1.5 py-0.5 rounded bg-deep-800/60 border border-deep-400/30 text-deep-200/85"
-                          >
-                            #<Highlight text={tag} query={search} />
+                          <span key={tag} className="text-[9px] font-mono tracking-wider px-1.5 py-0.5 rounded bg-deep-800/60 border tk-border-faint tk-text-muted">
+                            #{tag}
                           </span>
                         ))}
                       </div>
                     )}
-                  </div>
-                </div>
-              </button>
-            ))}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Full picker — search, domain filter, full grid. ─── */}
+        {browseMode === 'all' && (
+          <div className="animate-fade-in">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[11px] font-mono text-amber-300/95 uppercase tracking-[0.22em]">
+                ◇ 全部场景
+              </p>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-mono tk-cool-soft tracking-wider tabular-nums">
+                  {visibleScenarios.length} / {EXAMPLE_SCENARIOS.length}
+                </span>
+                <Button onClick={() => { setBrowseMode('featured'); setSearch(''); setFilter('all'); }} variant="ghost" size="sm">
+                  ← 精选
+                </Button>
+              </div>
+            </div>
+
+            {/* Search + Surprise */}
+            <div className="flex gap-2 mb-3">
+              <div className="flex-1 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-300/70 text-[14px] font-mono pointer-events-none">⌕</span>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="搜索场景 / 标签…  (例如 AI, 货币, 气候)"
+                  className="w-full pl-8 pr-3 py-2 bg-deep-800/50 border tk-border-faint rounded-lg text-[14px] tk-text-primary placeholder-deep-300/55 focus:border-amber-300/55 transition-all"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 tk-text-muted hover:text-amber-300 text-[14px] px-1.5"
+                    title="清空搜索"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <Button onClick={handleSurprise} variant="secondary" size="md" title="随机选一个">
+                🎲 SURPRISE
+              </Button>
+            </div>
+
+            {/* Domain filter chips */}
+            <div className="flex flex-wrap gap-1.5 mb-3.5">
+              {DOMAIN_FILTERS.map(f => {
+                const active = filter === f.value;
+                const count = f.value === 'all'
+                  ? EXAMPLE_SCENARIOS.length
+                  : EXAMPLE_SCENARIOS.filter(s => s.domain === f.value).length;
+                return (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => setFilter(f.value)}
+                    className={`
+                      flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-mono tracking-wider transition-all
+                      ${active
+                        ? 'bg-amber-300/[0.10] border border-amber-300/55 text-amber-200 shadow-glow-sm'
+                        : 'bg-deep-800/40 border tk-border-faint tk-text-secondary hover:border-amber-300/35 hover:text-amber-300'
+                      }
+                    `}
+                  >
+                    <span className={active ? 'text-amber-300' : 'tk-text-muted'}>{f.icon}</span>
+                    {f.label}
+                    <span className={`text-[10px] tabular-nums ${active ? 'text-amber-300/85' : 'tk-text-muted'}`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Scenario grid (or empty state) */}
+            {visibleScenarios.length === 0 ? (
+              <div className="glass-subtle rounded-lg p-8 text-center">
+                <p className="text-[13px] font-mono tk-text-secondary">未找到匹配场景</p>
+                <p className="text-[11px] font-mono tk-text-muted mt-1.5">
+                  试试其它关键词，或点 🎲 SURPRISE 随机抽一个
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {visibleScenarios.map((ex, i) => (
+                  <button
+                    key={`${ex.domain}-${ex.title}-${i}`}
+                    onClick={() => handleExampleClick(ex)}
+                    className={`
+                      group text-left p-4 rounded-lg transition-all duration-300
+                      ${hypothesis === ex.hypothesis
+                        ? 'border-glow-active bg-amber-300/[0.05]'
+                        : 'glass-subtle hover:border-glow'
+                      }
+                    `}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="text-amber-300/85 text-xl mt-0.5 font-mono shrink-0">{ex.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[14px] font-medium tk-text-primary group-hover:text-amber-200 transition-colors block">
+                          <Highlight text={ex.title} query={search} />
+                        </span>
+                        <span className="block text-[12px] tk-text-secondary mt-1 leading-relaxed">
+                          <Highlight text={ex.hypothesis} query={search} />
+                        </span>
+                        {ex.tags && ex.tags.length > 0 && (
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {ex.tags.map(tag => (
+                              <span
+                                key={tag}
+                                className="text-[9px] font-mono tracking-wider px-1.5 py-0.5 rounded bg-deep-800/60 border tk-border-faint tk-text-muted"
+                              >
+                                #<Highlight text={tag} query={search} />
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -383,14 +438,14 @@ export function ScenarioInput() {
       {/* Divider */}
       <div className="flex items-center gap-4 mb-8">
         <span className="flex-1 divider-warm" />
-        <span className="text-[15px] font-mono text-deep-300/55 uppercase tracking-[0.2em]">或自定义</span>
+        <span className="text-[10px] font-mono tk-text-muted uppercase tracking-[0.22em]">或自定义</span>
         <span className="flex-1 divider-warm" />
       </div>
 
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="block text-[15px] font-mono text-deep-200/75 mb-2 uppercase tracking-[0.2em]">
+          <label className="block text-[11px] font-mono tk-text-muted mb-2 uppercase tracking-[0.22em]">
             场景标题（可选）
           </label>
           <input
@@ -398,12 +453,12 @@ export function ScenarioInput() {
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder="简短标题"
-            className="w-full bg-deep-700/30 border border-deep-400/40 rounded-lg px-4 py-3 text-sm text-white placeholder-deep-300/55 transition-all"
+            className="w-full bg-deep-700/30 border tk-border-faint rounded-lg px-4 py-3 text-sm tk-text-primary placeholder-deep-300/55 transition-all"
           />
         </div>
 
         <div>
-          <label className="block text-[15px] font-mono text-deep-200/75 mb-2 uppercase tracking-[0.2em]">
+          <label className="block text-[11px] font-mono tk-text-muted mb-2 uppercase tracking-[0.22em]">
             假设描述 <span className="text-amber-300/90">*</span>
           </label>
           <textarea
@@ -411,12 +466,12 @@ export function ScenarioInput() {
             onChange={e => setHypothesis(e.target.value)}
             placeholder="如果……会怎样？"
             rows={3}
-            className="w-full bg-deep-700/30 border border-deep-400/40 rounded-lg px-4 py-3 text-sm text-white placeholder-deep-300/55 resize-none transition-all"
+            className="w-full bg-deep-700/30 border tk-border-faint rounded-lg px-4 py-3 text-sm tk-text-primary placeholder-deep-300/55 resize-none transition-all"
           />
         </div>
 
         <div>
-          <label className="block text-[15px] font-mono text-deep-200/75 mb-2 uppercase tracking-[0.2em]">
+          <label className="block text-[11px] font-mono tk-text-muted mb-2 uppercase tracking-[0.22em]">
             领域分类
           </label>
           <div className="grid grid-cols-4 gap-2">
@@ -431,10 +486,10 @@ export function ScenarioInput() {
                 type="button"
                 onClick={() => setDomain(opt.value)}
                 className={`
-                  py-2.5 rounded-lg text-xs transition-all
+                  py-2 rounded-md text-[12px] font-mono tracking-[0.10em] transition-all
                   ${domain === opt.value
-                    ? 'bg-amber-300/[0.06] border border-amber-300/45 text-amber-300 shadow-glow-sm'
-                    : 'bg-deep-700/20 border border-deep-400/35 text-deep-200/85 hover:border-deep-400/45 hover:text-deep-200/95'
+                    ? 'bg-amber-300/[0.10] border border-amber-300/55 text-amber-200 shadow-glow-sm'
+                    : 'bg-deep-700/30 border tk-border-faint tk-text-secondary hover:border-amber-300/30 hover:text-amber-300'
                   }
                 `}
               >
@@ -445,7 +500,7 @@ export function ScenarioInput() {
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 text-earth-rust text-xs bg-earth-rust/5 border border-earth-rust/15 px-4 py-3 rounded-lg font-mono">
+          <div className="flex items-center gap-2 text-earth-rust text-xs bg-earth-rust/5 border border-earth-rust/30 px-4 py-3 rounded-lg font-mono">
             <span>⚠</span> {error}
           </div>
         )}
@@ -455,9 +510,10 @@ export function ScenarioInput() {
           disabled={!hypothesis.trim() || status === 'starting'}
           className={`
             w-full relative overflow-hidden font-medium py-3.5 rounded-lg transition-all duration-300
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/40
             ${hypothesis.trim()
               ? 'bg-gradient-to-r from-amber-700 to-amber-600 text-white shadow-glow hover:shadow-glow-lg btn-glow'
-              : 'bg-deep-600/50 text-deep-300/65 cursor-not-allowed'
+              : 'bg-deep-600/50 tk-text-faint cursor-not-allowed'
             }
             disabled:opacity-40 disabled:cursor-not-allowed
           `}
@@ -469,7 +525,7 @@ export function ScenarioInput() {
             </span>
           ) : (
             <span className="flex items-center justify-center gap-2 text-sm tracking-wide">
-              启动推演
+              ▶ 启动推演
             </span>
           )}
         </button>

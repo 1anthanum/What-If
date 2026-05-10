@@ -7,6 +7,7 @@ import { AnnotationModal } from './AnnotationModal';
 import { AttractorView } from './AttractorView';
 import { PersonaSelector } from './PersonaSelector';
 import { ConeVisualization } from './ConeVisualization';
+import { Button } from '../common/ui';
 
 const DOMAIN_ICONS: Record<string, string> = {
   agriculture: '🌾',
@@ -39,6 +40,16 @@ export function CounterfactualView() {
   } = store;
 
   const [timeHorizon, setTimeHorizon] = useState('30 years');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const BASIC_MODES = [
+    { key: 'single',  label: '单一时间线', hint: '推演一条主线' },
+    { key: 'explore', label: '可能性探索', hint: 'Ensemble 多分支' },
+  ] as const;
+  const ADVANCED_MODES = [
+    { key: 'embodied',  label: '具身视角',     hint: '历史人物代理' },
+    { key: 'attractor', label: '吸引子检测', hint: '跨假设收敛点' },
+  ] as const;
 
   // Load events on mount
   useEffect(() => {
@@ -96,26 +107,26 @@ export function CounterfactualView() {
                       {ev.title}
                     </h3>
                   </div>
-                  <span className="text-[15px] font-mono text-deep-200/75 bg-deep-600/20 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-mono tk-cool-soft bg-deep-600/30 px-2 py-0.5 rounded tabular-nums">
                     {ev.period}
                   </span>
                 </div>
-                <p className="text-[15px] text-deep-200/85 leading-relaxed mb-3 line-clamp-2">
+                <p className="text-[13px] tk-text-secondary leading-relaxed mb-3 line-clamp-2">
                   {ev.description}
                 </p>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-[15px] font-mono text-deep-200/70">
+                  <div className="flex items-center gap-3 text-[11px] font-mono tk-text-muted">
                     <span>{ev.region}</span>
-                    <span>·</span>
+                    <span className="tk-text-faint">·</span>
                     <span>{ev.decision_node_count} 决策节点</span>
                   </div>
-                  <span className="text-[15px] font-mono text-amber-300/75 group-hover:text-amber-300/95 transition-colors">
+                  <span className="text-[12px] font-mono text-amber-300/85 group-hover:text-amber-200 transition-colors tracking-[0.10em]">
                     探索 →
                   </span>
                 </div>
                 {ev.default_modification && (
-                  <div className="mt-3 pt-2 border-t border-deep-400/35">
-                    <p className="text-[14px] text-amber-300/75 italic">
+                  <div className="mt-3 pt-2 border-t tk-border-faint">
+                    <p className="text-[12px] text-amber-300/85 italic leading-relaxed">
                       推荐假设：{ev.default_modification}
                     </p>
                   </div>
@@ -151,17 +162,14 @@ export function CounterfactualView() {
       {/* Back button + Title */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => store.clearEvent()}
-            className="text-[14px] font-mono text-deep-200/85 hover:text-amber-300/70 transition-colors px-2 py-1 border border-deep-400/45 rounded hover:border-amber-300/55"
-          >
+          <Button onClick={() => store.clearEvent()} variant="ghost" size="sm">
             ← 返回
-          </button>
-          <h2 className="text-sm font-medium text-white/85">
+          </Button>
+          <h2 className="text-sm font-medium tk-text-primary">
             {selectedEvent?.title}
           </h2>
         </div>
-        <span className="text-[15px] font-mono text-deep-200/70">
+        <span className="text-[12px] font-mono tk-cool-soft tabular-nums">
           {selectedEvent?.period}
         </span>
       </div>
@@ -203,55 +211,84 @@ export function CounterfactualView() {
                 </select>
               </div>
 
-              {/* Mode toggle */}
-              <div className="flex items-center gap-1 bg-deep-700/30 rounded-lg border border-deep-400/45 p-0.5">
-                {([
-                  { key: 'single', label: '单一时间线' },
-                  { key: 'explore', label: '可能性探索' },
-                  { key: 'embodied', label: '具身视角' },
-                  { key: 'attractor', label: '吸引子检测' },
-                ] as const).map(({ key, label }) => (
+              {/* Mode toggle — basic tier; advanced reveals on demand */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-deep-700/30 rounded-lg border tk-border-faint p-0.5">
+                  {BASIC_MODES.map(({ key, label, hint }) => {
+                    const active = explorationMode === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => store.setExplorationMode(key)}
+                        title={hint}
+                        className={`px-3 py-1.5 rounded text-[13px] font-mono transition-all ${
+                          active
+                            ? 'bg-amber-300/[0.12] text-amber-200 border border-amber-300/55 shadow-glow-sm'
+                            : 'tk-text-secondary hover:text-amber-300 border border-transparent'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(showAdvanced || (ADVANCED_MODES as readonly { key: string }[]).some(m => m.key === explorationMode)) ? (
+                  <div className="flex items-center gap-1 bg-cool-400/[0.04] rounded-lg border border-cool-400/30 p-0.5 animate-fade-in">
+                    {ADVANCED_MODES.map(({ key, label, hint }) => {
+                      const active = explorationMode === key;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => store.setExplorationMode(key)}
+                          title={hint}
+                          className={`px-3 py-1.5 rounded text-[13px] font-mono transition-all ${
+                            active
+                              ? 'bg-cool-400/[0.12] text-cool-200 border border-cool-400/55'
+                              : 'tk-text-secondary hover:text-cool-300 border border-transparent'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
                   <button
-                    key={key}
-                    onClick={() => store.setExplorationMode(key)}
-                    className={`px-3 py-1.5 rounded text-[14px] font-mono transition-all ${
-                      explorationMode === key
-                        ? 'bg-amber-300/15 text-amber-300/80 border border-amber-300/55'
-                        : 'text-deep-200/85 hover:text-deep-200/95 border border-transparent'
-                    }`}
+                    onClick={() => setShowAdvanced(true)}
+                    className="text-[12px] font-mono tk-cool-soft hover:tk-cool tracking-[0.10em] px-2.5 py-1.5 rounded border border-cool-400/25 hover:border-cool-400/55 transition-all"
+                    title="解锁具身视角与吸引子检测"
                   >
-                    {label}
+                    + 进阶 ▾
                   </button>
-                ))}
+                )}
               </div>
             </div>
 
-            {/* Generate button (not shown for attractor mode — it has its own UI) */}
-            {explorationMode !== 'attractor' && (
-              <button
-                onClick={() => {
-                  if (!modification.trim()) return;
-                  if (explorationMode === 'explore') {
-                    store.startExploration(modification.trim(), timeHorizon);
-                  } else if (explorationMode === 'embodied') {
-                    store.startEmbodiedExploration(modification.trim(), timeHorizon);
-                  } else {
-                    store.generateTimeline(modification.trim(), timeHorizon);
-                  }
-                }}
-                disabled={
-                  !modification.trim() ||
-                  (explorationMode === 'embodied' && store.selectedPersonaIds.length < 2)
+            {/* Generate button — outer guard already excludes 'attractor' mode */}
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => {
+                if (!modification.trim()) return;
+                if (explorationMode === 'explore') {
+                  store.startExploration(modification.trim(), timeHorizon);
+                } else if (explorationMode === 'embodied') {
+                  store.startEmbodiedExploration(modification.trim(), timeHorizon);
+                } else {
+                  store.generateTimeline(modification.trim(), timeHorizon);
                 }
-                className="px-5 py-2 bg-gradient-to-r from-amber-300/80 to-amber-400/80 text-deep-950 text-xs font-semibold rounded-lg hover:from-amber-300 hover:to-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-glow-sm hover:shadow-glow"
-              >
-                {explorationMode === 'explore'
-                  ? '探索所有可能性'
-                  : explorationMode === 'embodied'
-                    ? '以历史人物视角探索'
-                    : '生成反事实时间线'}
-              </button>
-            )}
+              }}
+              disabled={
+                !modification.trim() ||
+                (explorationMode === 'embodied' && store.selectedPersonaIds.length < 2)
+              }
+            >
+              {explorationMode === 'explore'
+                ? '▶ 探索所有可能性'
+                : explorationMode === 'embodied'
+                  ? '▶ 以历史人物视角'
+                  : '▶ 生成时间线'}
+            </Button>
           </div>
 
           {/* Mode descriptions */}
