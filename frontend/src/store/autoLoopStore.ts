@@ -44,7 +44,14 @@ export interface CycleState {
   isSubqMaster?: boolean;
   // Judge verdict — explicit ruling on contested points
   judgeVerdict?: JudgeVerdict | null;
+  // Memory compression flag — when true, heavy fields (persona.content
+  // bodies, stanceMatrix, etc.) have been dropped to keep long sessions
+  // from bloating browser memory. synthesisPreview / nextHypothesis remain.
+  compressed?: boolean;
 }
+
+/** Keep this many recent cycles in full detail; older ones get compressed. */
+const KEEP_LIVE_CYCLES = 5;
 
 interface AutoLoopState {
   // Config
@@ -403,6 +410,35 @@ export const useAutoLoopStore = create<AutoLoopState>()(
               synthesisPreview: event.data.synthesis_preview as string,
               converged: event.data.converged as boolean,
               activeModule: null,
+            });
+            // Memory hygiene: when cycle count exceeds the live window,
+            // compress oldest cycles by dropping heavy fields. The user
+            // still sees synthesisPreview / nextHypothesis / verdict shape.
+            set((s) => {
+              if (s.cycles.length <= KEEP_LIVE_CYCLES) return s;
+              const lastLiveIdx = s.cycles.length - KEEP_LIVE_CYCLES;
+              const compressed = s.cycles.map((c, i) => {
+                if (i >= lastLiveIdx || c.compressed) return c;
+                return {
+                  ...c,
+                  personas: c.personas.map((p) => ({
+                    ...p,
+                    content: p.content.length > 280
+                      ? p.content.slice(0, 280) + '…'
+                      : p.content,
+                  })),
+                  stanceMatrix: null,
+                  candidateQuestions: [],
+                  subQuestions: [],
+                  judgeVerdict: c.judgeVerdict ? {
+                    verdicts: c.judgeVerdict.verdicts.slice(0, 2),
+                    overall_strongest: c.judgeVerdict.overall_strongest,
+                    overall_weakest: c.judgeVerdict.overall_weakest,
+                  } : c.judgeVerdict,
+                  compressed: true,
+                };
+              });
+              return { cycles: compressed };
             });
             break;
 

@@ -17,6 +17,7 @@ Usage in services:
 """
 
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Union
 
@@ -163,6 +164,7 @@ class OllamaBackend(InferenceBackend):
         seed = getattr(self._tracker, "llm_seed", None)
         if seed is not None:
             options["seed"] = int(seed)
+        t0 = time.perf_counter()
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(
@@ -188,12 +190,21 @@ class OllamaBackend(InferenceBackend):
                 label=f"ollama:{self._model}",
                 backend_spec=f"ollama:{self._model}",
                 tier=self._tier,
+                latency_ms=(time.perf_counter() - t0) * 1000,
             )
 
             return content
 
         except Exception as e:
             logger.error(f"Ollama complete error ({self._model}): {e}")
+            self._tracker.record(
+                input_tokens=0, output_tokens=0,
+                label=f"ollama:{self._model}",
+                backend_spec=f"ollama:{self._model}",
+                tier=self._tier,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                error=type(e).__name__,
+            )
             raise
 
     async def stream(
@@ -220,6 +231,8 @@ class OllamaBackend(InferenceBackend):
         seed = getattr(self._tracker, "llm_seed", None)
         if seed is not None:
             stream_options["seed"] = int(seed)
+        t0 = time.perf_counter()
+        err: str | None = None
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 async with client.stream(
@@ -249,6 +262,7 @@ class OllamaBackend(InferenceBackend):
 
         except Exception as e:
             logger.error(f"Ollama stream error ({self._model}): {e}")
+            err = type(e).__name__
             raise
         finally:
             self._tracker.record(
@@ -257,6 +271,8 @@ class OllamaBackend(InferenceBackend):
                 label=f"ollama-stream:{self._model}",
                 backend_spec=f"ollama:{self._model}",
                 tier=self._tier,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                error=err,
             )
 
     def backend_name(self) -> str:
@@ -344,6 +360,7 @@ class OpenAICompatibleBackend(InferenceBackend):
         seed = getattr(self._tracker, "llm_seed", None)
         if seed is not None:
             body["seed"] = int(seed)
+        t0 = time.perf_counter()
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 resp = await client.post(
@@ -373,10 +390,19 @@ class OpenAICompatibleBackend(InferenceBackend):
                 cached_input_tokens=cached,
                 backend_spec=f"{self._provider}:{self._model}",
                 tier=self._tier,
+                latency_ms=(time.perf_counter() - t0) * 1000,
             )
             return content
         except Exception as e:
             logger.error(f"{self._provider} complete error ({self._model}): {e}")
+            self._tracker.record(
+                input_tokens=0, output_tokens=0,
+                label=f"{self._provider}:{self._model}",
+                backend_spec=f"{self._provider}:{self._model}",
+                tier=self._tier,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                error=type(e).__name__,
+            )
             raise
 
     async def stream(
@@ -404,6 +430,8 @@ class OpenAICompatibleBackend(InferenceBackend):
             body["seed"] = int(seed)
         prompt_tokens = 0
         completion_tokens = 0
+        t0 = time.perf_counter()
+        err: str | None = None
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 async with client.stream(
@@ -446,6 +474,7 @@ class OpenAICompatibleBackend(InferenceBackend):
                             completion_tokens = usage.get("completion_tokens", completion_tokens)
         except Exception as e:
             logger.error(f"{self._provider} stream error ({self._model}): {e}")
+            err = type(e).__name__
             raise
         finally:
             self._tracker.record(
@@ -454,6 +483,8 @@ class OpenAICompatibleBackend(InferenceBackend):
                 label=f"{self._provider}-stream:{self._model}",
                 backend_spec=f"{self._provider}:{self._model}",
                 tier=self._tier,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                error=err,
             )
 
     def backend_name(self) -> str:

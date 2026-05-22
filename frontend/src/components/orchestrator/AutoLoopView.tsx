@@ -1238,6 +1238,14 @@ function CycleDetail({ cycle }: { cycle: import('../../store/autoLoopStore').Cyc
         <p className="text-[15px] text-white/65 flex-1 leading-relaxed truncate">
           {cycle.hypothesis}
         </p>
+        {cycle.compressed && (
+          <span
+            className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-deep-400/35 text-deep-200/55 shrink-0"
+            title="该轮详情已压缩以节省内存（保留摘要 + 裁决）"
+          >
+            ⊟ 已压缩
+          </span>
+        )}
         <span className="text-[15px] text-deep-200/75 shrink-0">
           {expanded ? '▼' : '▶'}
         </span>

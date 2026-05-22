@@ -1,6 +1,7 @@
 """Claude API client wrapper with streaming, retry, and token tracking."""
 
 import logging
+import time
 from typing import AsyncGenerator, Union
 
 import anthropic
@@ -135,7 +136,20 @@ class ClaudeClient:
             kwargs["temperature"] = effective_temp
         else:
             _log_temp_omit_once(use_model)
-        response = await self.async_client.messages.create(**kwargs)
+        t0 = time.perf_counter()
+        try:
+            response = await self.async_client.messages.create(**kwargs)
+        except Exception as e:
+            self.tracker.record(
+                input_tokens=0, output_tokens=0,
+                label=f"complete:{use_model}",
+                backend_spec=f"claude:{use_model}",
+                tier=tier,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                error=type(e).__name__,
+            )
+            raise
+        latency_ms = (time.perf_counter() - t0) * 1000
 
         cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
         cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
@@ -146,6 +160,7 @@ class ClaudeClient:
             cached_input_tokens=cache_read,
             backend_spec=f"claude:{use_model}",
             tier=tier,
+            latency_ms=latency_ms,
         )
 
         return response.content[0].text
@@ -185,25 +200,33 @@ class ClaudeClient:
         output_tokens = 0
         cache_read = 0
 
-        async with self.async_client.messages.stream(**stream_kwargs) as stream:
-            async for event in stream:
-                if hasattr(event, "type"):
-                    if event.type == "content_block_delta" and hasattr(event.delta, "text"):
-                        yield event.delta.text
-                    elif event.type == "message_start" and hasattr(event.message, "usage"):
-                        input_tokens = event.message.usage.input_tokens
-                        cache_read = getattr(event.message.usage, "cache_read_input_tokens", 0) or 0
-                    elif event.type == "message_delta" and hasattr(event.usage, "output_tokens"):
-                        output_tokens = event.usage.output_tokens
-
-        self.tracker.record(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            label=f"stream:{use_model}",
-            cached_input_tokens=cache_read,
-            backend_spec=f"claude:{use_model}",
-            tier=tier,
-        )
+        t0 = time.perf_counter()
+        err: str | None = None
+        try:
+            async with self.async_client.messages.stream(**stream_kwargs) as stream:
+                async for event in stream:
+                    if hasattr(event, "type"):
+                        if event.type == "content_block_delta" and hasattr(event.delta, "text"):
+                            yield event.delta.text
+                        elif event.type == "message_start" and hasattr(event.message, "usage"):
+                            input_tokens = event.message.usage.input_tokens
+                            cache_read = getattr(event.message.usage, "cache_read_input_tokens", 0) or 0
+                        elif event.type == "message_delta" and hasattr(event.usage, "output_tokens"):
+                            output_tokens = event.usage.output_tokens
+        except Exception as e:
+            err = type(e).__name__
+            raise
+        finally:
+            self.tracker.record(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                label=f"stream:{use_model}",
+                cached_input_tokens=cache_read,
+                backend_spec=f"claude:{use_model}",
+                tier=tier,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                error=err,
+            )
 
     def get_usage_summary(self) -> dict:
         """Return current session's token usage and cost estimate."""

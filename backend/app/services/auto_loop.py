@@ -331,6 +331,7 @@ class AutoLoopScheduler:
         extractor_config: dict | None = None,
         judge_verdict: bool = False,
         persona_overrides: dict[str, str] | None = None,
+        session_id: str | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Outer wrapper: tee every SSE event to a per-session JSONL log
         for offline analysis / report export. Inner generator does the work.
@@ -359,6 +360,7 @@ class AutoLoopScheduler:
             extractor_config=extractor_config,
             judge_verdict=judge_verdict,
             persona_overrides=persona_overrides,
+            session_id=session_id,
         )
         # Buffer first event to learn session_id, then start writing log
         first_ev = None
@@ -404,12 +406,16 @@ class AutoLoopScheduler:
         extractor_config: dict | None = None,
         judge_verdict: bool = False,
         persona_overrides: dict[str, str] | None = None,
+        session_id: str | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Run autonomous exploration cycles.
 
         SSE events:
           auto_start → cycle_start → (mode-specific events) →
           cycle_complete → next_hypothesis → ... → auto_complete
+
+        session_id: if provided by caller, used as-is (lets the HTTP layer
+            pre-allocate one for the SSE bus). Otherwise auto-generated.
         """
         settings = get_settings()
         if max_cycles is None:
@@ -427,7 +433,8 @@ class AutoLoopScheduler:
                     clean_overrides[pid] = text.strip()[:4000]
         self._persona_overrides = clean_overrides
 
-        session_id = str(uuid.uuid4())[:8]
+        if not session_id:
+            session_id = str(uuid.uuid4())[:8]
         result = AutoLoopResult(session_id, event_id, seed_hypothesis, mode=mode)
         self.results[session_id] = result
 

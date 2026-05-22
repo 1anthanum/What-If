@@ -1,11 +1,15 @@
 """API routes for the Cross-Module Feedback Loop (Orchestrator) and Auto-Loop."""
 
+import asyncio
+import uuid
+
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header, Request
 from app.services.orchestrator import OrchestratorService
 from app.services.auto_loop import AutoLoopScheduler
 from app.services.autonomous_debate import AutonomousDebateService
-from app.core.streaming import create_sse_response
+from app.core.streaming import create_sse_response, create_sse_response_from_bus
+from app.core.sse_bus import get_registry, pipe_to_bus
 from app.schemas.orchestration import FeedbackLoopConfig
 from app.schemas.autonomous import AutonomousDebateConfig
 
@@ -85,25 +89,63 @@ async def run_auto_loop(req: AutoLoopRequest):
     if req.mode == "historical" and not req.event_id:
         raise HTTPException(400, "historical mode requires event_id")
 
-    return create_sse_response(
-        _auto_loop.run(
-            seed_hypothesis=req.seed_hypothesis,
-            max_cycles=req.max_cycles,
-            mode=req.mode,
-            event_id=req.event_id,
-            max_iterations_per_loop=req.max_iterations_per_loop,
-            time_horizon=req.time_horizon,
-            adversarial=req.adversarial,
-            extract_stances=req.extract_stances,
-            branching=req.branching,
-            flip_stance=req.flip_stance,
-            subq_decomposition=req.subq_decomposition,
-            self_reflection=req.self_reflection,
-            subdomain_routing=req.subdomain_routing,
-            judge_verdict=req.judge_verdict,
-            persona_overrides=req.persona_overrides,
-        )
+    # Pre-allocate session_id + bus so the cycle keeps running even if the
+    # client disconnects. Client can reconnect via /auto-loop/{sid}/resume
+    # with a Last-Event-ID header to pick up where it dropped off.
+    session_id = str(uuid.uuid4())[:8]
+    registry = get_registry()
+    bus = registry.create(session_id)
+    # Janitor: every new session is a good moment to GC idle ones.
+    registry.cleanup_idle()
+
+    source = _auto_loop.run(
+        seed_hypothesis=req.seed_hypothesis,
+        max_cycles=req.max_cycles,
+        mode=req.mode,
+        event_id=req.event_id,
+        max_iterations_per_loop=req.max_iterations_per_loop,
+        time_horizon=req.time_horizon,
+        adversarial=req.adversarial,
+        extract_stances=req.extract_stances,
+        branching=req.branching,
+        flip_stance=req.flip_stance,
+        subq_decomposition=req.subq_decomposition,
+        self_reflection=req.self_reflection,
+        subdomain_routing=req.subdomain_routing,
+        judge_verdict=req.judge_verdict,
+        persona_overrides=req.persona_overrides,
+        session_id=session_id,
     )
+    # Background task drains generator into the bus; survives HTTP disconnect.
+    asyncio.create_task(pipe_to_bus(source, bus))
+
+    return create_sse_response_from_bus(bus, from_id=0)
+
+
+@router.get("/auto-loop/{session_id}/resume")
+async def resume_auto_loop(
+    session_id: str,
+    last_event_id: int = 0,
+    last_event_id_header: str | None = Header(None, alias="Last-Event-ID"),
+):
+    """Resume streaming an in-progress (or recently-finished) auto-loop session.
+
+    The client passes its last received event id either via the
+    ``Last-Event-ID`` header (standard SSE) or the ``last_event_id`` query
+    param (browsers often strip custom headers from EventSource reconnects).
+    Replays buffered events with id > from_id, then tails live events
+    until the cycle completes."""
+    bus = get_registry().get(session_id)
+    if bus is None:
+        raise HTTPException(404, f"session {session_id} not found (may have been GC'd)")
+    # Header takes precedence if present and parseable.
+    from_id = last_event_id
+    if last_event_id_header:
+        try:
+            from_id = int(last_event_id_header)
+        except ValueError:
+            pass
+    return create_sse_response_from_bus(bus, from_id=from_id)
 
 
 @router.post("/auto-loop/{session_id}/cancel")

@@ -54,6 +54,8 @@ class TokenRecord:
     cycle: Optional[int] = None
     persona: Optional[str] = None
     cost_usd: float = 0.0
+    latency_ms: float = 0.0                   # wall-clock duration of this API call
+    error: Optional[str] = None               # non-None means the call failed
 
 
 class TokenTracker:
@@ -104,6 +106,8 @@ class TokenTracker:
         phase: Optional[str] = None,
         cycle: Optional[int] = None,
         persona: Optional[str] = None,
+        latency_ms: float = 0.0,
+        error: Optional[str] = None,
     ):
         """Record one API call. Explicit kwargs override the tracker context."""
         ctx_phase = phase if phase is not None else self._context.get("phase")
@@ -119,6 +123,8 @@ class TokenTracker:
             phase=ctx_phase,
             cycle=ctx_cycle,
             persona=ctx_persona,
+            latency_ms=latency_ms,
+            error=error,
         )
         rec.cost_usd = self._cost_for(rec)
         self.records.append(rec)
@@ -198,6 +204,51 @@ class TokenTracker:
 
     def by_persona(self) -> dict[str, dict]:
         return self._aggregate_by(lambda r: r.persona)
+
+    def by_backend(self) -> dict[str, dict]:
+        return self._aggregate_by(lambda r: r.backend_spec)
+
+    def latency_by(self, key_fn) -> dict[str, dict]:
+        """For each group, return latency stats: count, avg_ms, p50_ms, p95_ms,
+        max_ms, error_count. Ignores zero-latency records (unintrumented calls)."""
+        groups: dict[str, list[float]] = defaultdict(list)
+        error_groups: dict[str, int] = defaultdict(int)
+        for r in self.records:
+            k = key_fn(r)
+            if k is None:
+                k = "unknown"
+            k = str(k)
+            if r.error is not None:
+                error_groups[k] += 1
+            if r.latency_ms > 0:
+                groups[k].append(r.latency_ms)
+
+        out: dict[str, dict] = {}
+        for k, latencies in groups.items():
+            latencies_sorted = sorted(latencies)
+            n = len(latencies_sorted)
+            out[k] = {
+                "count": n,
+                "avg_ms": round(sum(latencies_sorted) / n, 1),
+                "p50_ms": round(latencies_sorted[n // 2], 1),
+                "p95_ms": round(latencies_sorted[min(n - 1, int(n * 0.95))], 1),
+                "max_ms": round(latencies_sorted[-1], 1),
+                "error_count": error_groups.get(k, 0),
+            }
+        # Also surface groups that only had errors (no latencies)
+        for k, ec in error_groups.items():
+            if k not in out:
+                out[k] = {
+                    "count": 0, "avg_ms": 0.0, "p50_ms": 0.0,
+                    "p95_ms": 0.0, "max_ms": 0.0, "error_count": ec,
+                }
+        return out
+
+    def latency_by_backend(self) -> dict[str, dict]:
+        return self.latency_by(lambda r: r.backend_spec)
+
+    def latency_by_phase(self) -> dict[str, dict]:
+        return self.latency_by(lambda r: r.phase)
 
     # ---- summary ---------------------------------------------------------
 

@@ -310,59 +310,147 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ─── SSE Stream Parser ──────────────────────────────────────
 
+export interface SSEStreamOptions extends RequestInit {
+  /** Build a resume URL from (session_id, last_event_id). The stream will
+   *  reconnect with exponential backoff if it ends without a `done` event.
+   *  `session_id` comes from whatever ``extractSessionId`` captured during
+   *  the live stream — usually the first ``auto_start``-like event. When
+   *  omitted, no reconnect is attempted. */
+  resumeUrl?: (sessionId: string, lastEventId: number) => string;
+  /** Extract the session_id from a parsed SSE event so the resume URL
+   *  builder knows where to reconnect. Returns null if the event isn't
+   *  the session-bootstrapping one. */
+  extractSessionId?: (event: SSEEvent) => string | null;
+  /** Max reconnect attempts before giving up. Default 5. */
+  maxReconnects?: number;
+}
+
 export function createSSEStream(
   url: string,
-  options?: RequestInit,
+  options?: SSEStreamOptions,
 ): {
   events: AsyncGenerator<SSEEvent>;
   abort: () => void;
 } {
   const controller = new AbortController();
+  const { resumeUrl, extractSessionId, maxReconnects = 5, ...fetchOptions } = options || {};
 
   async function* streamEvents(): AsyncGenerator<SSEEvent> {
-    const finalUrl = ensureAbsolute(url);
-    const res = await fetch(finalUrl, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-        ...(options?.headers || {}),
-      },
-      signal: controller.signal,
-    });
+    let currentUrl = ensureAbsolute(url);
+    let lastEventId = 0;
+    let sessionId: string | null = null;
+    let reconnects = 0;
+    let cleanlyDone = false;
+    let isReconnect = false;
 
-    if (!res.ok) {
-      throw new Error(`Stream failed: ${res.statusText}`);
-    }
-
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let currentEventType = 'message';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEventType = line.slice(7).trim();
-        } else if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            yield { type: currentEventType, data };
-          } catch {
-            // Skip malformed JSON
+    while (!cleanlyDone) {
+      // For reconnect requests, server expects GET on resume URL.
+      const reqInit: RequestInit = isReconnect
+        ? {
+            method: 'GET',
+            headers: {
+              'Accept': 'text/event-stream',
+              'Last-Event-ID': String(lastEventId),
+            },
+            signal: controller.signal,
           }
-          currentEventType = 'message';
-        }
+        : {
+            ...fetchOptions,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'text/event-stream',
+              ...(fetchOptions?.headers || {}),
+            },
+            signal: controller.signal,
+          };
+
+      let res: Response;
+      try {
+        res = await fetch(currentUrl, reqInit);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        if (!resumeUrl || !sessionId || reconnects >= maxReconnects) throw err;
+        reconnects++;
+        await new Promise((r) => setTimeout(r, Math.min(1000 * 2 ** reconnects, 8000)));
+        currentUrl = ensureAbsolute(resumeUrl(sessionId, lastEventId));
+        isReconnect = true;
+        continue;
       }
+
+      if (!res.ok) {
+        // 404 on resume = session GC'd; bail out cleanly.
+        if (isReconnect && res.status === 404) return;
+        throw new Error(`Stream failed: ${res.statusText}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEventType = 'message';
+      let currentEventId: number | null = null;
+      let streamClosedCleanly = false;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('id: ')) {
+              const n = parseInt(line.slice(4).trim(), 10);
+              if (!isNaN(n)) currentEventId = n;
+            } else if (line.startsWith('event: ')) {
+              currentEventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                const ev: SSEEvent = { type: currentEventType, data };
+
+                // Capture session_id from first known event for reconnect.
+                if (!sessionId && extractSessionId) {
+                  const sid = extractSessionId(ev);
+                  if (sid) sessionId = sid;
+                }
+                // Treat server's `done` event as a clean termination — no
+                // reconnect needed.
+                if (currentEventType === 'done') {
+                  streamClosedCleanly = true;
+                  cleanlyDone = true;
+                  continue;
+                }
+                yield ev;
+                if (currentEventId !== null) lastEventId = currentEventId;
+              } catch {
+                // Skip malformed JSON
+              }
+              currentEventType = 'message';
+              currentEventId = null;
+            }
+          }
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        // Network / parse error → fall through to reconnect path below.
+      }
+
+      if (streamClosedCleanly) return;
+
+      // Stream closed without `done` event → try resume if possible.
+      if (!resumeUrl || !sessionId || reconnects >= maxReconnects) {
+        // Caller didn't opt in to resume, OR we never learned the session_id,
+        // OR we've exhausted retries. End the iterator cleanly.
+        return;
+      }
+      reconnects++;
+      await new Promise((r) => setTimeout(r, Math.min(1000 * 2 ** reconnects, 8000)));
+      currentUrl = ensureAbsolute(resumeUrl(sessionId, lastEventId));
+      isReconnect = true;
     }
   }
 
@@ -774,6 +862,18 @@ export const autoLoopApi = {
     createSSEStream(`${BASE_URL}/orchestrator/auto-loop`, {
       method: 'POST',
       body: JSON.stringify(config),
+      // Opt into auto-reconnect: server keeps the cycle running in a
+      // background task with a per-session ring buffer; on disconnect we
+      // GET the resume URL with `Last-Event-ID` to pick up where we left off.
+      extractSessionId: (ev) => {
+        const d = ev?.data as Record<string, unknown> | undefined;
+        if (ev.type === 'auto_start' && typeof d?.session_id === 'string') {
+          return d.session_id;
+        }
+        return null;
+      },
+      resumeUrl: (sessionId, lastEventId) =>
+        `${BASE_URL}/orchestrator/auto-loop/${sessionId}/resume?last_event_id=${lastEventId}`,
     }),
 
   /**
