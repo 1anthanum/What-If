@@ -36,6 +36,12 @@ backend/pilot_runs/
 backend/evaluation/
 benchmark/
 
+# Persisted session archive (SQLite, written at runtime)
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+
 # Docker
 *.log
 

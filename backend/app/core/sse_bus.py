@@ -164,16 +164,36 @@ def get_registry() -> EventBusRegistry:
     return _registry
 
 
-async def pipe_to_bus(source: AsyncGenerator[dict, None], bus: SessionEventBus) -> None:
+async def pipe_to_bus(
+    source: AsyncGenerator[dict, None],
+    bus: SessionEventBus,
+    on_complete=None,
+) -> None:
     """Drain a source generator into the bus. Marks bus completed when done.
 
     Used by the router to run a cycle generator in a background task while
-    HTTP clients subscribe to the bus."""
+    HTTP clients subscribe to the bus.
+
+    on_complete: optional callable that receives ``(bus.session_id, archive)``
+        after the bus is marked completed. ``archive`` is the full list of
+        events the generator produced (unbounded — independent of the bus's
+        bounded replay buffer). May be sync or async.
+    """
+    import inspect
+    archive: list[dict] = []
     try:
         async for event in source:
+            archive.append(event)
             bus.publish(event)
     except Exception as e:
         logger.exception("source generator failed for bus %s: %s", bus.session_id, e)
         bus.publish({"type": "bus_error", "data": {"detail": str(e)[:300]}})
     finally:
         bus.mark_completed()
+        if on_complete is not None:
+            try:
+                result = on_complete(bus.session_id, archive)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as e:
+                logger.exception("on_complete callback failed for bus %s: %s", bus.session_id, e)

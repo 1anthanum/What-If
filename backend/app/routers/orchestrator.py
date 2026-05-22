@@ -10,6 +10,7 @@ from app.services.auto_loop import AutoLoopScheduler
 from app.services.autonomous_debate import AutonomousDebateService
 from app.core.streaming import create_sse_response, create_sse_response_from_bus
 from app.core.sse_bus import get_registry, pipe_to_bus
+from app.core.session_archiver import archive_auto_loop
 from app.schemas.orchestration import FeedbackLoopConfig
 from app.schemas.autonomous import AutonomousDebateConfig
 
@@ -117,7 +118,8 @@ async def run_auto_loop(req: AutoLoopRequest):
         session_id=session_id,
     )
     # Background task drains generator into the bus; survives HTTP disconnect.
-    asyncio.create_task(pipe_to_bus(source, bus))
+    # `archive_auto_loop` persists the full session to SQLite on completion.
+    asyncio.create_task(pipe_to_bus(source, bus, on_complete=archive_auto_loop))
 
     return create_sse_response_from_bus(bus, from_id=0)
 
