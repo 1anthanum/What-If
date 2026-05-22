@@ -745,7 +745,22 @@ export interface AutoLoopConfig {
   self_reflection?: boolean;
   subdomain_routing?: boolean;
   judge_verdict?: boolean;
+  self_contradict?: boolean;
+  cross_lingual?: boolean;
+  live_critic?: boolean;
+  fact_check?: boolean;
   persona_overrides?: Record<string, string>;
+}
+
+export interface CriticIssue {
+  type: string;
+  detail: string;
+}
+
+export interface FactCheckClaim {
+  claim: string;
+  verdict: 'certain' | 'uncertain' | 'likely_wrong' | 'unverifiable';
+  reason: string;
 }
 
 export interface JudgeVerdictItem {

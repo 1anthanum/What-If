@@ -73,6 +73,10 @@ class AutoLoopRequest(BaseModel):
     self_reflection: bool = False        # B. each persona self-critiques after speaking
     subdomain_routing: bool = False      # C. route each sub-question to best-matched provider (needs A)
     judge_verdict: bool = False          # after synthesis, emit explicit verdicts on contested points
+    self_contradict: bool = False        # force each persona to write strongest counter + still-hold reason
+    cross_lingual: bool = False          # per-persona "think in native tradition" directive
+    live_critic: bool = False            # cheap-tier critic flags logic issues after every persona statement
+    fact_check: bool = False             # plausibility check on empirical claims after each persona
     # User-customized persona system prompts. Map persona_id → full prompt text.
     # Missing keys fall back to the built-in defaults.
     persona_overrides: dict[str, str] | None = None
@@ -116,6 +120,10 @@ async def run_auto_loop(req: AutoLoopRequest):
         judge_verdict=req.judge_verdict,
         persona_overrides=req.persona_overrides,
         session_id=session_id,
+        self_contradict=req.self_contradict,
+        cross_lingual=req.cross_lingual,
+        live_critic=req.live_critic,
+        fact_check=req.fact_check,
     )
     # Background task drains generator into the bus; survives HTTP disconnect.
     # `archive_auto_loop` persists the full session to SQLite on completion.

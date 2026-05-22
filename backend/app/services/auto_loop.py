@@ -228,6 +228,132 @@ FALSIFIABILITY_DIRECTIVE_EN = (
     "/ arguments which, if true, would change your stance. Vague or evasive answers count as dogmatic.)"
 )
 
+# Self-contradiction test — tests two things at once: (a) does the persona
+# actually understand its own position deeply enough to construct the
+# strongest counter? (b) does it have integrity to explain why it still holds?
+# Wraps before the falsifiability line if both flags are enabled.
+SELF_CONTRADICT_DIRECTIVE_ZH = (
+    "\n\n**在结尾另起两段**：\n"
+    "1. 「反方最强论证：__」（3-4 句最锐利的、能真正撼动你立场的反方论证；"
+    "**不要稻草人**，要写出你心里那个真正担心的反驳）\n"
+    "2. 「我仍坚持原立场，因为：__」（2-3 句说明为什么尽管反方论证有力，"
+    "你依然坚持原立场；不接受这个测试 = 教条主义）"
+)
+SELF_CONTRADICT_DIRECTIVE_EN = (
+    "\n\n**End with two separate paragraphs**:\n"
+    "1. \"Strongest counter-argument: __\" (3-4 sentences of the sharpest "
+    "counter you can construct against your own position — *no straw men*; "
+    "write the rebuttal that genuinely worries you)\n"
+    "2. \"I still hold my stance because: __\" (2-3 sentences explaining "
+    "why you maintain your position despite the counter)"
+)
+
+# Per-persona "think in native tradition" directives — prepended to user
+# prompt when cross_lingual_personas is enabled. Forces each persona to
+# reason in its tradition's *actual* conceptual vocabulary (not a generic
+# English-translated proxy) before producing the Chinese response.
+CROSS_LINGUAL_DIRECTIVES_ZH: dict[str, str] = {
+    "rationalist": (
+        "（思考方式提示：请先用分析哲学传统的英语术语在内心组织论证 — "
+        "categorical / counterfactual / supervenience / hard problem 等 — "
+        "再用中文表达；避免直接借用西方分析哲学时只剩抽象套话。）\n\n"
+    ),
+    "existentialist": (
+        "（思考方式提示：请先用德语 / 法语存在主义核心概念组织思考 — "
+        "Geworfenheit (被抛性)、Angst (焦虑)、l'angoisse、Mauvaise foi (自欺)、"
+        "Sein-zum-Tode (向死而生) 等 — 再用中文表达；保留原概念的特定锐度。）\n\n"
+    ),
+    "pragmatist": (
+        "（思考方式提示：请用美国实用主义核心词汇思考 — fixation of belief、"
+        "cash value of an idea、warranted assertibility、successful inquiry — "
+        "强调「这个信念在实践中导致什么具体行动差异」的提问方式。）\n\n"
+    ),
+    "eastern_philosopher": (
+        "（思考方式提示：请先用古汉语 / 经文术语组织思考 — 「道」「无为」"
+        "「缘起」「空」「执」「中道」「天人合一」「格物」 — 而非现代西式"
+        "分析框架；可在论证中引用《道德经》《论语》或佛经短句。）\n\n"
+    ),
+    "critical_theorist": (
+        "（思考方式提示：请用德语 / 法语批判理论核心概念思考 — Verdinglichung "
+        "(物化)、ideology critique、Foucault 的 pouvoir/savoir、Hegemony、"
+        "Performativität — 揭示「常识」背后的权力结构。）\n\n"
+    ),
+    "eastern_philosopher_v2": "",   # placeholder for v2 personas if added
+}
+FACT_CHECK_SYSTEM_PROMPT = (
+    "你是一位事实核查员。读完一段 persona 在哲学辩论中的发言后，"
+    "**只针对具体的经验性事实命题**（年份、事件、统计数字、人物声明、"
+    "技术细节）进行评估 —— 不评价价值判断、不评价立场、不评价论证结构。\n\n"
+    "对每条可核查的事实命题，给出以下标签之一：\n"
+    "- certain：你高度确信此命题为真\n"
+    "- uncertain：你不确信，命题可能正确也可能错误\n"
+    "- likely_wrong：你较确信此命题不准确（包含错误年份、张冠李戴、虚构事件等）\n"
+    "- unverifiable：命题无法用通用知识核查（如某具体个人经历）\n\n"
+    "**重要**：你也只有有限的知识；不要伪装权威。如果不确定，标 uncertain 不是 likely_wrong。\n"
+    "找出最多 3 条最关键的事实命题。如果发言完全是观点 / 价值判断而无事实命题，"
+    "claims 数组为空。\n\n"
+    "严格输出 JSON：\n"
+    "{\n"
+    "  \"claims\": [\n"
+    "    {\"claim\": \"原文中的事实陈述（≤ 60 字）\", "
+    "\"verdict\": \"certain|uncertain|likely_wrong|unverifiable\", "
+    "\"reason\": \"≤ 50 字的核查理由\"}\n"
+    "  ]\n"
+    "}\n"
+    "只输出 JSON。"
+)
+
+
+CRITIC_SYSTEM_PROMPT = (
+    "你是一位严苛但建设性的论证审稿人。读完一个 persona 在哲学辩论中的发言后，"
+    "找出**最多 3 条**具体的论证问题。要点：\n"
+    "- 必须是**真正的逻辑问题**，不是观点不同（你不评价立场对错）\n"
+    "- 必须是具体可指出的，不要泛泛而谈\n"
+    "- 如果发言论证扎实，issues 数组可以为空（≤ 2 条最好）\n\n"
+    "可能的问题类型：\n"
+    "circular（循环论证）/ unstated_premise（隐含未声明前提）/ "
+    "evidence_gap（证据不足以支撑结论强度）/ equivocation（偷换概念）/ "
+    "false_dichotomy（错误二分法）/ weak_analogy（类比不当）/ "
+    "ad_hominem（人身攻击）/ overgeneralization（过度概括）\n\n"
+    "严格输出 JSON：\n"
+    "{\n"
+    "  \"issues\": [\n"
+    "    {\"type\": \"unstated_premise\", \"detail\": \"≤ 30 字的具体描述\"}\n"
+    "  ]\n"
+    "}\n"
+    "只输出 JSON，不要 markdown。"
+)
+
+
+CROSS_LINGUAL_DIRECTIVES_EN: dict[str, str] = {
+    "rationalist": (
+        "(Thinking style cue: organize the argument first in the categorical / "
+        "counterfactual / supervenience vocabulary of analytic philosophy "
+        "before expressing it in English.)\n\n"
+    ),
+    "existentialist": (
+        "(Thinking style cue: reach first for German/French existentialist "
+        "concepts — Geworfenheit, Angst, Mauvaise foi, Sein-zum-Tode — "
+        "before paraphrasing them in English; keep the original concept's edge.)\n\n"
+    ),
+    "pragmatist": (
+        "(Thinking style cue: use American pragmatist vocabulary — fixation "
+        "of belief, cash value of an idea, warranted assertibility — and "
+        "always ask 'what concrete action would this belief change?')\n\n"
+    ),
+    "eastern_philosopher": (
+        "(Thinking style cue: think first in classical Chinese / sutra terms "
+        "— 道 (dao), 无为 (wu-wei), 缘起 (dependent origination), 空 (śūnyatā), "
+        "中道 (middle way) — rather than Western analytic frameworks; cite "
+        "short Daodejing / Analects / Buddhist canon passages where apt.)\n\n"
+    ),
+    "critical_theorist": (
+        "(Thinking style cue: reach for critical-theory technical terms — "
+        "Verdinglichung, ideology critique, pouvoir/savoir, hegemony, "
+        "performativity — to surface power structures behind 'common sense'.)\n\n"
+    ),
+}
+
 # Judge prompt — invoked after synthesis to produce explicit verdicts
 # on contested points. Output is a structured JSON the UI renders.
 JUDGE_VERDICT_SYSTEM = (
@@ -332,6 +458,10 @@ class AutoLoopScheduler:
         judge_verdict: bool = False,
         persona_overrides: dict[str, str] | None = None,
         session_id: str | None = None,
+        self_contradict: bool = False,
+        cross_lingual: bool = False,
+        live_critic: bool = False,
+        fact_check: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """Outer wrapper: tee every SSE event to a per-session JSONL log
         for offline analysis / report export. Inner generator does the work.
@@ -361,6 +491,10 @@ class AutoLoopScheduler:
             judge_verdict=judge_verdict,
             persona_overrides=persona_overrides,
             session_id=session_id,
+            self_contradict=self_contradict,
+            cross_lingual=cross_lingual,
+            live_critic=live_critic,
+            fact_check=fact_check,
         )
         # Buffer first event to learn session_id, then start writing log
         first_ev = None
@@ -407,6 +541,10 @@ class AutoLoopScheduler:
         judge_verdict: bool = False,
         persona_overrides: dict[str, str] | None = None,
         session_id: str | None = None,
+        self_contradict: bool = False,
+        cross_lingual: bool = False,
+        live_critic: bool = False,
+        fact_check: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """Run autonomous exploration cycles.
 
@@ -432,6 +570,10 @@ class AutoLoopScheduler:
                 if pid in VALID_PERSONA_IDS and isinstance(text, str):
                     clean_overrides[pid] = text.strip()[:4000]
         self._persona_overrides = clean_overrides
+        self._self_contradict = bool(self_contradict)
+        self._cross_lingual = bool(cross_lingual)
+        self._live_critic = bool(live_critic)
+        self._fact_check_enabled = bool(fact_check)
 
         if not session_id:
             session_id = str(uuid.uuid4())[:8]
@@ -827,23 +969,34 @@ class AutoLoopScheduler:
                     "目的不是戏谑反对，而是**找出反方立场里真正合理的部分**，"
                     "证明你能跳出自身传统的认知边界。这是检验思想韧性的方式。\n"
                 )
+            sc_directive_zh = SELF_CONTRADICT_DIRECTIVE_ZH if getattr(self, "_self_contradict", False) else ""
+            sc_directive_en = SELF_CONTRADICT_DIRECTIVE_EN if getattr(self, "_self_contradict", False) else ""
+            if getattr(self, "_cross_lingual", False):
+                cl_directive_zh = CROSS_LINGUAL_DIRECTIVES_ZH.get(persona["id"], "")
+                cl_directive_en = CROSS_LINGUAL_DIRECTIVES_EN.get(persona["id"], "")
+            else:
+                cl_directive_zh = cl_directive_en = ""
             if _lang == "en":
                 user_prompt = (
+                    f"{cl_directive_en}"
                     f"{history_context}"
                     f"Question: {question}\n\n"
                     f"From the philosophical stance of your tradition, give your analysis and position on this question. "
                     f"If you have fundamental disagreement with other traditions, name the point of disagreement explicitly. "
                     f"Respond in English throughout, regardless of the language used in the question."
                     f"{flip_directive}"
+                    f"{sc_directive_en}"
                     f"{FALSIFIABILITY_DIRECTIVE_EN}"
                 )
             else:
                 user_prompt = (
+                    f"{cl_directive_zh}"
                     f"{history_context}"
                     f"当前问题：{question}\n\n"
                     f"请从你的哲学立场出发，对这个问题给出你的分析和立场。"
                     f"如果你与其他思想流派存在根本分歧，请明确指出分歧所在。"
                     f"{flip_directive}"
+                    f"{sc_directive_zh}"
                     f"{FALSIFIABILITY_DIRECTIVE_ZH}"
                 )
 
@@ -888,6 +1041,33 @@ class AutoLoopScheduler:
                 "model": model_name,
                 "content": content,
             })
+
+            # ── Live critic — fires on every persona statement when enabled.
+            # Uses cheap tier (cost capped at a few cents per cycle).
+            if getattr(self, "_live_critic", False) and content and not content.startswith("[模型"):
+                try:
+                    issues = await self._critic_review(content, question, persona)
+                    if issues is not None:
+                        yield sse_event("phil_critic_note", {
+                            "cycle": cycle_num,
+                            "persona_id": persona["id"],
+                            "issues": issues,
+                        })
+                except Exception as e:
+                    logger.warning("critic review failed for %s: %s", persona["id"], e)
+
+            # ── Fact-check — plausibility review of empirical claims.
+            if getattr(self, "_fact_check_enabled", False) and content and not content.startswith("[模型"):
+                try:
+                    claims = await self._fact_check(content, question, persona)
+                    if claims is not None:
+                        yield sse_event("phil_fact_check", {
+                            "cycle": cycle_num,
+                            "persona_id": persona["id"],
+                            "claims": claims,
+                        })
+                except Exception as e:
+                    logger.warning("fact_check failed for %s: %s", persona["id"], e)
 
             # ── Method B: Self-Reflection ──
             # Same model is asked to identify ONE assumption it made + ONE
@@ -1289,6 +1469,123 @@ class AutoLoopScheduler:
             "is_subq_master": True,
             "sub_question_count": len(subqs),
         })
+
+    async def _fact_check(
+        self,
+        statement: str,
+        question: str,
+        persona: dict,
+    ) -> list[dict] | None:
+        """LLM-based plausibility check on empirical claims in the statement.
+
+        NOTE: This is a *plausibility* check, not an authoritative fact-check.
+        The reviewer LLM has the same knowledge cutoff as the speaker, so it
+        catches internal contradictions and obvious howlers, but not subtle
+        date / number errors that require external lookup. Web-search-backed
+        verification is a future enhancement.
+
+        Returns list of {claim, verdict, reason} dicts (possibly empty), or
+        None on parse failure.
+        """
+        import json as _json
+        import re as _re
+        from app.core.inference import get_cheap_backend
+        backend = get_cheap_backend(self.tracker)
+        user = (
+            f"问题: {question}\n\n"
+            f"Persona: {persona.get('name','')}\n\n"
+            f"发言:\n{statement}\n\n"
+            f"请核查并按 schema 输出 JSON。"
+        )
+        try:
+            raw = await backend.complete(
+                system_prompt=FACT_CHECK_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user}],
+                max_tokens=500,
+                temperature=0.2,
+            )
+        except Exception as e:
+            logger.error(f"_fact_check backend error: {e}")
+            return None
+        raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+        raw = _re.sub(r"```\s*$", "", raw)
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if not m:
+            return None
+        try:
+            parsed = _json.loads(m.group(0))
+        except _json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        claims = parsed.get("claims") or []
+        valid_verdicts = {"certain", "uncertain", "likely_wrong", "unverifiable"}
+        clean = []
+        for it in claims:
+            if not isinstance(it, dict):
+                continue
+            verdict = str(it.get("verdict", "")).lower()
+            if verdict not in valid_verdicts:
+                continue
+            clean.append({
+                "claim": str(it.get("claim", ""))[:200],
+                "verdict": verdict,
+                "reason": str(it.get("reason", ""))[:200],
+            })
+        return clean[:3]
+
+    async def _critic_review(
+        self,
+        statement: str,
+        question: str,
+        persona: dict,
+    ) -> list[dict] | None:
+        """Send one persona statement to a cheap-tier critic for logic flaws.
+
+        Returns a list of {type, detail} dicts (possibly empty), or None on
+        parse failure. The caller decides whether to emit an SSE event.
+        """
+        import json as _json
+        import re as _re
+        from app.core.inference import get_cheap_backend
+        backend = get_cheap_backend(self.tracker)
+        user = (
+            f"问题: {question}\n\n"
+            f"Persona: {persona.get('name','')} ({persona.get('role','')})\n\n"
+            f"发言:\n{statement}\n\n"
+            f"请审查并按 schema 输出 JSON。"
+        )
+        try:
+            raw = await backend.complete(
+                system_prompt=CRITIC_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user}],
+                max_tokens=400,
+                temperature=0.2,
+            )
+        except Exception as e:
+            logger.error(f"_critic_review backend error: {e}")
+            return None
+        raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+        raw = _re.sub(r"```\s*$", "", raw)
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if not m:
+            return None
+        try:
+            parsed = _json.loads(m.group(0))
+        except _json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        issues = parsed.get("issues") or []
+        clean = []
+        for it in issues:
+            if not isinstance(it, dict):
+                continue
+            t = str(it.get("type", ""))[:40]
+            d = str(it.get("detail", ""))[:200]
+            if d:
+                clean.append({"type": t, "detail": d})
+        return clean[:3]
 
     async def _judge_verdict(
         self,

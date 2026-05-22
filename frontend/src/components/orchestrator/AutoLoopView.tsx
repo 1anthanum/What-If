@@ -76,6 +76,10 @@ export function AutoLoopView() {
   const [predictionEnabled, setPredictionEnabled] = useState(false);
   type StancePred = 'support' | 'oppose' | 'neutral';
   const [stancePredictions, setStancePredictions] = useState<Record<string, StancePred>>({});
+  const [selfContradictEnabled, setSelfContradictEnabled] = useState(false);
+  const [crossLingualEnabled, setCrossLingualEnabled] = useState(false);
+  const [liveCriticEnabled, setLiveCriticEnabled] = useState(false);
+  const [factCheckEnabled, setFactCheckEnabled] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const editedPersonaIds = usePersonaPromptStore((s) => s.editedIds);
   const overridePayload = usePersonaPromptStore((s) => s.overridePayload);
@@ -141,6 +145,10 @@ export function AutoLoopView() {
       self_reflection: configMode === 'philosophical' ? selfReflection : false,
       subdomain_routing: configMode === 'philosophical' ? (subqDecomp && subdomainRouting) : false,
       judge_verdict: configMode === 'philosophical' ? judgeVerdictEnabled : false,
+      self_contradict: configMode === 'philosophical' ? selfContradictEnabled : false,
+      cross_lingual: configMode === 'philosophical' ? crossLingualEnabled : false,
+      live_critic: configMode === 'philosophical' ? liveCriticEnabled : false,
+      fact_check: configMode === 'philosophical' ? factCheckEnabled : false,
     } as AutoLoopConfig & { flip_stance?: boolean };
     // Include persona overrides (only applies in philosophical mode where personas matter).
     if (configMode === 'philosophical') {
@@ -734,6 +742,34 @@ export function AutoLoopView() {
                       onToggle={setPredictionEnabled}
                       color="blue"
                     />
+                    <FeatureToggle
+                      label="🪞 自我反驳"
+                      description="每位 persona 必须写出最锐利的反方论证 + 解释为何仍坚持原立场。测试论证深度。"
+                      enabled={selfContradictEnabled}
+                      onToggle={setSelfContradictEnabled}
+                      color="purple"
+                    />
+                    <FeatureToggle
+                      label="🌍 母语思维"
+                      description="每位 persona 用本传统的原始术语（德/法存在主义、古汉语/经文、批判理论德语词等）思考再表达"
+                      enabled={crossLingualEnabled}
+                      onToggle={setCrossLingualEnabled}
+                      color="blue"
+                    />
+                    <FeatureToggle
+                      label="🔍 实时 critic"
+                      description="每位 persona 发言完，cheap-tier 审稿人立刻指出至多 3 条逻辑问题（循环论证 / 隐含前提 / 证据不足等）"
+                      enabled={liveCriticEnabled}
+                      onToggle={setLiveCriticEnabled}
+                      color="red"
+                    />
+                    <FeatureToggle
+                      label="📋 事实核查"
+                      description="对每个发言中的经验性命题做 LLM 合理性检查（标 certain / uncertain / likely_wrong / unverifiable）。不能替代真正的 web 核查。"
+                      enabled={factCheckEnabled}
+                      onToggle={setFactCheckEnabled}
+                      color="red"
+                    />
                   </div>
                 </div>
               )}
@@ -1143,10 +1179,42 @@ function splitFalsifiability(content: string): { body: string; falsifiability: s
   return { body, falsifiability: m[1].trim() };
 }
 
+/** Detect the self-contradiction test sections ("反方最强论证" + "我仍坚持原立场").
+ *  Returns the cleaned body + the two extracted paragraphs (or null if absent).
+ *  Run AFTER splitFalsifiability so the falsifiability line doesn't bleed in. */
+function splitSelfContradiction(content: string): {
+  body: string;
+  counterArg: string | null;
+  stillHold: string | null;
+} {
+  const counterRe = /(?:^|\n)\s*\**\s*(?:反方最强论证|Strongest counter-argument)\s*[:：]\s*([\s\S]+?)(?=(?:\n\s*\**\s*(?:我仍坚持原立场|I still hold my stance)\s*[，,]?\s*(?:因为|because)\s*[:：])|$)/i;
+  const stillHoldRe = /(?:^|\n)\s*\**\s*(?:我仍坚持原立场|I still hold my stance)\s*[，,]?\s*(?:因为|because)\s*[:：]\s*([\s\S]+?)$/i;
+  const counter = content.match(counterRe);
+  const stillHold = content.match(stillHoldRe);
+  if (!counter && !stillHold) return { body: content, counterArg: null, stillHold: null };
+
+  const cutFrom = counter
+    ? (counter.index ?? content.length)
+    : (stillHold ? (stillHold.index ?? content.length) : content.length);
+  const body = content.slice(0, cutFrom).replace(/\s+$/, '');
+  return {
+    body,
+    counterArg: counter ? counter[1].trim() : null,
+    stillHold: stillHold ? stillHold[1].trim() : null,
+  };
+}
+
 function PersonaCard({ persona, isActive, prediction }: { persona: PhilPersonaState; isActive: boolean; prediction?: 'support' | 'oppose' | 'neutral' }) {
   const colorClass = PERSONA_COLORS[persona.id] ?? 'text-deep-200/50 border-deep-400/45 bg-deep-600/5';
   const icon = PERSONA_ICONS[persona.id] ?? '◇';
-  const { body, falsifiability } = splitFalsifiability(persona.content);
+  // Strip falsifiability line first, then peel off optional self-contradiction
+  // sections; the remaining `body` is the persona's primary statement.
+  const afterFals = splitFalsifiability(persona.content);
+  const falsifiability = afterFals.falsifiability;
+  const sc = splitSelfContradiction(afterFals.body);
+  const body = sc.body;
+  const counterArg = sc.counterArg;
+  const stillHold = sc.stillHold;
   const dogmatic = !persona.streaming && persona.content.length > 0 && falsifiability === null;
   const predLabel = prediction === 'support' ? '支持' : prediction === 'oppose' ? '反对' : prediction === 'neutral' ? '中立' : null;
   const predClass = prediction === 'support'
@@ -1204,6 +1272,32 @@ function PersonaCard({ persona, isActive, prediction }: { persona: PhilPersonaSt
           {persona.streaming && <span className="cursor-blink" />}
         </p>
       )}
+      {counterArg && (
+        <div className="mt-3 pt-3 border-t border-purple-400/15">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-[9px] font-mono uppercase tracking-wider text-purple-400/85">
+              🪞 反方最强论证
+            </span>
+            <span className="flex-1 h-px bg-purple-400/15" />
+          </div>
+          <p className="text-[13px] text-purple-300/90 leading-relaxed whitespace-pre-wrap">
+            {counterArg}
+          </p>
+        </div>
+      )}
+      {stillHold && (
+        <div className="mt-2 pt-2 border-t border-purple-400/10">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-[9px] font-mono uppercase tracking-wider text-purple-400/70">
+              我仍坚持，因为
+            </span>
+            <span className="flex-1 h-px bg-purple-400/10" />
+          </div>
+          <p className="text-[13px] text-purple-300/75 leading-relaxed whitespace-pre-wrap italic">
+            {stillHold}
+          </p>
+        </div>
+      )}
       {falsifiability && (
         <div className="mt-3 pt-3 border-t border-earth-green/15">
           <div className="flex items-baseline gap-2 mb-1">
@@ -1215,6 +1309,75 @@ function PersonaCard({ persona, isActive, prediction }: { persona: PhilPersonaSt
           <p className="text-[13px] text-earth-green/90 leading-relaxed italic">
             {falsifiability}
           </p>
+        </div>
+      )}
+      {persona.critic_issues && persona.critic_issues.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-earth-rust/15">
+          <div className="flex items-baseline gap-2 mb-1.5">
+            <span className="text-[9px] font-mono uppercase tracking-wider text-earth-rust/85">
+              🔍 critic 标记 ({persona.critic_issues.length})
+            </span>
+            <span className="flex-1 h-px bg-earth-rust/15" />
+          </div>
+          <ul className="space-y-1">
+            {persona.critic_issues.map((iss, i) => (
+              <li key={i} className="flex items-start gap-2 text-[12px]">
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-earth-rust/40 bg-earth-rust/[0.06] text-earth-rust/85 shrink-0 mt-0.5">
+                  {iss.type || '?'}
+                </span>
+                <span className="text-deep-100/85 leading-snug">{iss.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {persona.fact_check_claims && persona.fact_check_claims.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-amber-300/15">
+          <div className="flex items-baseline gap-2 mb-1.5">
+            <span className="text-[9px] font-mono uppercase tracking-wider text-amber-300/85">
+              📋 事实核查 ({persona.fact_check_claims.length})
+            </span>
+            <span className="flex-1 h-px bg-amber-300/15" />
+            <span
+              className="text-[8px] font-mono text-deep-200/45 italic"
+              title="本核查是 LLM 合理性评估，不是权威核查"
+            >
+              非权威
+            </span>
+          </div>
+          <ul className="space-y-1.5">
+            {persona.fact_check_claims.map((c, i) => {
+              const tone = {
+                certain:        'border-earth-green/40 bg-earth-green/[0.05] text-earth-green/95',
+                uncertain:      'border-amber-300/40 bg-amber-300/[0.06] text-amber-200',
+                likely_wrong:   'border-earth-rust/55 bg-earth-rust/[0.10] text-earth-rust',
+                unverifiable:   'border-deep-400/35 bg-deep-700/30 text-deep-200/65',
+              }[c.verdict] || 'border-deep-400/30 text-deep-200/70';
+              const label = {
+                certain: '✓ 较可信',
+                uncertain: '? 不确定',
+                likely_wrong: '✗ 可能错',
+                unverifiable: '⚬ 不可查',
+              }[c.verdict] || c.verdict;
+              return (
+                <li key={i} className="text-[12px]">
+                  <div className="flex items-start gap-2">
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${tone}`}>
+                      {label}
+                    </span>
+                    <span className="text-deep-100/85 leading-snug flex-1">
+                      <span className="italic">「{c.claim}」</span>
+                    </span>
+                  </div>
+                  {c.reason && (
+                    <p className="text-[11px] text-deep-200/65 leading-snug mt-0.5 pl-[3.25rem]">
+                      ↳ {c.reason}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </div>

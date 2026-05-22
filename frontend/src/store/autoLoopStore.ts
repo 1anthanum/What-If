@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { autoLoopApi, type AutoLoopConfig, type AutoLoopMode, type StanceMatrix, type JudgeVerdict } from '../services/api';
+import { autoLoopApi, type AutoLoopConfig, type AutoLoopMode, type StanceMatrix, type JudgeVerdict, type CriticIssue, type FactCheckClaim } from '../services/api';
 
 export type AutoLoopStatus = 'idle' | 'running' | 'complete' | 'cancelled' | 'error';
 
@@ -12,6 +12,8 @@ export interface PhilPersonaState {
   content: string;
   streaming: boolean;
   reflection?: string;       // Method B: self-reflection
+  critic_issues?: CriticIssue[];  // populated by phil_critic_note when live_critic is on
+  fact_check_claims?: FactCheckClaim[];  // populated by phil_fact_check when fact_check is on
 }
 
 export interface SubQuestionState {
@@ -395,6 +397,42 @@ export const useAutoLoopStore = create<AutoLoopState>()(
               judgeVerdict: event.data.verdict as JudgeVerdict,
             });
             break;
+
+          // ── Live critic — attach issues to the persona that just spoke ──
+          case 'phil_critic_note': {
+            const pid = event.data.persona_id as string;
+            const issues = (event.data.issues as CriticIssue[]) || [];
+            const { currentCycle: cn, cycles: cs } = get();
+            const idx = cs.findIndex((c) => c.cycle === cn);
+            if (idx < 0) break;
+            set((s) => {
+              const updated = [...s.cycles];
+              const personas = updated[idx].personas.map((p) =>
+                p.id === pid ? { ...p, critic_issues: issues } : p,
+              );
+              updated[idx] = { ...updated[idx], personas };
+              return { cycles: updated };
+            });
+            break;
+          }
+
+          // ── Fact-check — attach plausibility-checked claims ──
+          case 'phil_fact_check': {
+            const pid = event.data.persona_id as string;
+            const claims = (event.data.claims as FactCheckClaim[]) || [];
+            const { currentCycle: cn, cycles: cs } = get();
+            const idx = cs.findIndex((c) => c.cycle === cn);
+            if (idx < 0) break;
+            set((s) => {
+              const updated = [...s.cycles];
+              const personas = updated[idx].personas.map((p) =>
+                p.id === pid ? { ...p, fact_check_claims: claims } : p,
+              );
+              updated[idx] = { ...updated[idx], personas };
+              return { cycles: updated };
+            });
+            break;
+          }
 
           // ── Feature 3: Candidate questions ──
           case 'candidate_questions':
