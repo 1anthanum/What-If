@@ -494,6 +494,139 @@ async def find_analogies(body: dict):
     return {"analogies": out}
 
 
+@router.post("/persona/followup")
+async def followup_persona(body: dict):
+    """Socratic follow-up: ask a specific persona a follow-up question that
+    references its prior statement. The persona stays in character and
+    responds to the user's question directly.
+
+    Body: {persona_id, question (cycle hypothesis), persona_statement,
+           followup, model_spec? }
+    """
+    import time as _time
+    from app.services.auto_loop import PHILOSOPHICAL_PERSONAS, ADVERSARIAL_SYSTEM_PROMPT
+    from app.core.inference import get_backend_from_spec
+
+    persona_id = (body.get("persona_id") or "").strip()
+    question = (body.get("question") or "").strip()
+    persona_statement = (body.get("persona_statement") or "").strip()
+    followup = (body.get("followup") or "").strip()
+    model_spec = (body.get("model_spec") or "claude:claude-sonnet-4-6").strip()
+    if not persona_id or not followup:
+        raise HTTPException(400, "persona_id and followup required")
+
+    persona = next((p for p in PHILOSOPHICAL_PERSONAS if p["id"] == persona_id), None)
+    if persona is None and persona_id == "adversary":
+        persona = {"id": "adversary", "name": "魔鬼代言人",
+                   "system_prompt": ADVERSARIAL_SYSTEM_PROMPT}
+    if persona is None:
+        raise HTTPException(404, f"unknown persona_id: {persona_id}")
+
+    user_prompt = (
+        f"原议题：{question}\n\n"
+        f"你之前的发言：\n{persona_statement}\n\n"
+        f"用户对你的追问：{followup}\n\n"
+        f"请保持你的哲学立场和语气，直接回应这个追问（≤200 字）。"
+        f"如果追问触及你立场的真正弱点，诚实地承认而非搪塞。"
+    )
+
+    t0 = _time.perf_counter()
+    try:
+        backend = get_backend_from_spec(model_spec, _auto_loop.tracker, tier="persona")
+        content = await backend.complete(
+            system_prompt=persona["system_prompt"],
+            messages=[{"role": "user", "content": user_prompt}],
+            max_tokens=600, temperature=0.6,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"followup backend error: {type(e).__name__}: {str(e)[:200]}")
+    return {
+        "persona_id": persona_id,
+        "persona_name": persona["name"],
+        "followup": followup,
+        "response": content,
+        "latency_ms": round((_time.perf_counter() - t0) * 1000, 1),
+        "model_spec": model_spec,
+    }
+
+
+@router.post("/persona/compare")
+async def compare_persona_across_models(body: dict):
+    """Run the same persona's system prompt across multiple model providers
+    on the same question. Returns a dict keyed by spec → response.
+
+    Used by the "🔀 多模型对比" button in PersonaCard: lets the user see
+    how Claude / GPT-5 / DeepSeek each interpret the same persona on the
+    same question, surfacing each model's internal philosophical biases.
+
+    Body: {persona_id: str, question: str, history?: str,
+           specs?: list[str]}
+        specs default to ["claude:claude-sonnet-4-6", "openai:gpt-5-mini",
+        "deepseek:deepseek-chat"]
+    """
+    import asyncio as _asyncio
+    import time as _time
+    from app.services.auto_loop import PHILOSOPHICAL_PERSONAS, ADVERSARIAL_SYSTEM_PROMPT
+    from app.core.inference import get_backend_from_spec
+
+    persona_id = (body.get("persona_id") or "").strip()
+    question = (body.get("question") or "").strip()
+    history = body.get("history") or ""
+    specs = body.get("specs") or [
+        "claude:claude-sonnet-4-6",
+        "openai:gpt-5-mini",
+        "deepseek:deepseek-chat",
+    ]
+    if not persona_id or not question:
+        raise HTTPException(400, "persona_id and question required")
+
+    # Resolve persona system prompt — same registry as /personas endpoint.
+    persona = next((p for p in PHILOSOPHICAL_PERSONAS if p["id"] == persona_id), None)
+    if persona is None and persona_id == "adversary":
+        persona = {"id": "adversary", "name": "魔鬼代言人", "role": "对抗",
+                   "system_prompt": ADVERSARIAL_SYSTEM_PROMPT}
+    if persona is None:
+        raise HTTPException(404, f"unknown persona_id: {persona_id}")
+
+    user_prompt = (
+        (f"{history}\n\n" if history else "")
+        + f"问题：{question}\n\n"
+        f"请从你的哲学立场出发，对这个问题给出你的分析和立场（300 字以内）。"
+    )
+
+    async def _one(spec: str) -> dict:
+        t0 = _time.perf_counter()
+        try:
+            backend = get_backend_from_spec(spec, _auto_loop.tracker, tier="persona")
+            content = await backend.complete(
+                system_prompt=persona["system_prompt"],
+                messages=[{"role": "user", "content": user_prompt}],
+                max_tokens=800, temperature=0.7,
+            )
+            return {
+                "spec": spec,
+                "content": content,
+                "latency_ms": round((_time.perf_counter() - t0) * 1000, 1),
+                "error": None,
+            }
+        except Exception as e:
+            return {
+                "spec": spec,
+                "content": "",
+                "latency_ms": round((_time.perf_counter() - t0) * 1000, 1),
+                "error": f"{type(e).__name__}: {str(e)[:200]}",
+            }
+
+    # Run all in parallel — typical wall-clock ~ slowest single provider.
+    results = await _asyncio.gather(*[_one(s) for s in specs])
+    return {
+        "persona_id": persona_id,
+        "persona_name": persona["name"],
+        "question": question,
+        "responses": results,
+    }
+
+
 @router.get("/auto-loop/_logs")
 async def list_auto_loop_logs():
     """List all auto-loop session log files (newest first), with metadata."""

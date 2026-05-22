@@ -14,6 +14,7 @@ export interface PhilPersonaState {
   reflection?: string;       // Method B: self-reflection
   critic_issues?: CriticIssue[];  // populated by phil_critic_note when live_critic is on
   fact_check_claims?: FactCheckClaim[];  // populated by phil_fact_check when fact_check is on
+  followups?: Array<{ followup: string; response: string }>;  // Socratic follow-up Q&A pairs
 }
 
 export interface SubQuestionState {
@@ -96,6 +97,8 @@ interface AutoLoopState {
   reset: () => void;
   tick: () => void;
   toggleSpectator: () => void;
+  /** Append a Socratic follow-up Q&A to a persona in a specific cycle. */
+  appendPersonaFollowup: (cycleNum: number, personaId: string, followup: string, response: string) => void;
 }
 
 const initialState = {
@@ -559,6 +562,20 @@ export const useAutoLoopStore = create<AutoLoopState>()(
   reset: () => set(initialState),
 
   toggleSpectator: () => set((s) => ({ spectatorOpen: !s.spectatorOpen })),
+
+  appendPersonaFollowup: (cycleNum, personaId, followup, response) =>
+    set((s) => {
+      const idx = s.cycles.findIndex((c) => c.cycle === cycleNum);
+      if (idx < 0) return s;
+      const updated = [...s.cycles];
+      const personas = updated[idx].personas.map((p) => {
+        if (p.id !== personaId) return p;
+        const next = [...(p.followups || []), { followup, response }];
+        return { ...p, followups: next };
+      });
+      updated[idx] = { ...updated[idx], personas };
+      return { cycles: updated };
+    }),
 
   tick: () => {
     const { startedAt, status } = get();

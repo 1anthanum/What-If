@@ -763,6 +763,27 @@ export interface FactCheckClaim {
   reason: string;
 }
 
+export interface PersonaFollowupResponse {
+  persona_id: string;
+  persona_name: string;
+  followup: string;
+  response: string;
+  latency_ms: number;
+  model_spec: string;
+}
+
+export interface PersonaCompareResponse {
+  persona_id: string;
+  persona_name: string;
+  question: string;
+  responses: Array<{
+    spec: string;
+    content: string;
+    latency_ms: number;
+    error: string | null;
+  }>;
+}
+
 export interface JudgeVerdictItem {
   contested_point: string;
   winning_position: string;
@@ -916,6 +937,31 @@ export const autoLoopApi = {
     request<{ sessions: Array<{ session_id: string; seed_hypothesis: string; mode: string; cycles: number; mtime: number }> }>(
       `/orchestrator/auto-loop/_logs`,
     ),
+
+  /** Run the same persona's prompt across multiple model providers. */
+  comparePersona: (body: {
+    persona_id: string;
+    question: string;
+    history?: string;
+    specs?: string[];
+  }) =>
+    request<PersonaCompareResponse>(`/orchestrator/persona/compare`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Send a Socratic follow-up question to a specific persona post-cycle. */
+  followupPersona: (body: {
+    persona_id: string;
+    question: string;
+    persona_statement: string;
+    followup: string;
+    model_spec?: string;
+  }) =>
+    request<PersonaFollowupResponse>(`/orchestrator/persona/followup`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // ─── Voting Hall API ──────────────────────────────────────

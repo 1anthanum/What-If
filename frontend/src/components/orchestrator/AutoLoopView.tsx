@@ -19,6 +19,8 @@ import { ForkingTree } from './ForkingTree';
 import { SpectatorPanel } from './SpectatorPanel';
 import { PortalSendButton } from '../common/PortalSendButton';
 import { PersonaPromptEditor } from './PersonaPromptEditor';
+import { PersonaCompareModal } from './PersonaCompareModal';
+import { PersonaFollowupModal } from './PersonaFollowupModal';
 import { usePersonaPromptStore } from '../../store/personaPromptStore';
 import type { AutoLoopConfig, AutoLoopMode } from '../../services/api';
 
@@ -932,6 +934,8 @@ export function AutoLoopView() {
                     persona={p}
                     isActive={p.id === activePersonaId}
                     prediction={stancePredictions[p.id]}
+                    cycleHypothesis={activeCycle.hypothesis}
+                    cycleNum={activeCycle.cycle}
                   />
                 ))}
               </div>
@@ -1204,7 +1208,17 @@ function splitSelfContradiction(content: string): {
   };
 }
 
-function PersonaCard({ persona, isActive, prediction }: { persona: PhilPersonaState; isActive: boolean; prediction?: 'support' | 'oppose' | 'neutral' }) {
+function PersonaCard({
+  persona, isActive, prediction, cycleHypothesis, cycleNum,
+}: {
+  persona: PhilPersonaState;
+  isActive: boolean;
+  prediction?: 'support' | 'oppose' | 'neutral';
+  cycleHypothesis?: string;
+  cycleNum?: number;
+}) {
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [followupOpen, setFollowupOpen] = useState(false);
   const colorClass = PERSONA_COLORS[persona.id] ?? 'text-deep-200/50 border-deep-400/45 bg-deep-600/5';
   const icon = PERSONA_ICONS[persona.id] ?? '◇';
   // Strip falsifiability line first, then peel off optional self-contradiction
@@ -1260,7 +1274,27 @@ function PersonaCard({ persona, isActive, prediction }: { persona: PhilPersonaSt
         {persona.streaming && (
           <span className="ml-auto w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
         )}
-        {!persona.streaming && persona.content && !falsifiability && !dogmatic && (
+        {!persona.streaming && persona.content && cycleHypothesis && (
+          <button
+            type="button"
+            onClick={() => setFollowupOpen(true)}
+            className="ml-auto text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-amber-300/35 text-amber-300/85 hover:border-amber-300/65 hover:bg-amber-300/[0.05] transition-colors"
+            title="向这位 persona 直接追问"
+          >
+            💬 追问
+          </button>
+        )}
+        {!persona.streaming && persona.content && cycleHypothesis && (
+          <button
+            type="button"
+            onClick={() => setCompareOpen(true)}
+            className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-amber-300/35 text-amber-300/85 hover:border-amber-300/65 hover:bg-amber-300/[0.05] transition-colors"
+            title="用同一 prompt 跑 Claude / GPT-5 / DeepSeek，对比三家模型对此 persona 的诠释差异"
+          >
+            🔀 对比
+          </button>
+        )}
+        {!persona.streaming && persona.content && !cycleHypothesis && !falsifiability && !dogmatic && (
           <span className="ml-auto text-[14px] font-mono text-deep-200/65">✓</span>
         )}
       </div>
@@ -1329,6 +1363,40 @@ function PersonaCard({ persona, isActive, prediction }: { persona: PhilPersonaSt
               </li>
             ))}
           </ul>
+        </div>
+      )}
+      {compareOpen && cycleHypothesis && (
+        <PersonaCompareModal
+          personaId={persona.id}
+          personaName={persona.name}
+          question={cycleHypothesis}
+          onClose={() => setCompareOpen(false)}
+        />
+      )}
+      {followupOpen && cycleHypothesis && cycleNum != null && (
+        <PersonaFollowupModal
+          personaId={persona.id}
+          personaName={persona.name}
+          cycleNum={cycleNum}
+          cycleHypothesis={cycleHypothesis}
+          personaStatement={persona.content}
+          onClose={() => setFollowupOpen(false)}
+        />
+      )}
+      {persona.followups && persona.followups.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-amber-300/15 space-y-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[9px] font-mono uppercase tracking-wider text-amber-300/85">
+              💬 追问对话 ({persona.followups.length})
+            </span>
+            <span className="flex-1 h-px bg-amber-300/15" />
+          </div>
+          {persona.followups.map((f, i) => (
+            <div key={i} className="text-[12px] leading-snug">
+              <p className="text-amber-300/85 font-medium">▶ {f.followup}</p>
+              <p className="text-deep-100/85 mt-0.5 pl-3 whitespace-pre-wrap">{f.response}</p>
+            </div>
+          ))}
         </div>
       )}
       {persona.fact_check_claims && persona.fact_check_claims.length > 0 && (
