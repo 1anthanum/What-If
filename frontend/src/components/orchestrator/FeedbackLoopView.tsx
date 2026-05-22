@@ -4,6 +4,7 @@ import { useCounterfactualStore } from '../../store/counterfactualStore';
 import { useAutoLoopStore } from '../../store/autoLoopStore';
 import { AutoLoopView } from './AutoLoopView';
 import { AutonomousDebateView } from './AutonomousDebateView';
+import { PortalSendButton } from '../common/PortalSendButton';
 import type { FeedbackLoopConfig } from '../../services/api';
 
 type OrchestratorMode = 'single' | 'autonomous' | 'topic';
@@ -329,9 +330,14 @@ export function FeedbackLoopView() {
 
           {/* Final synthesis */}
           <div className="glass border border-amber-300/40 rounded-lg p-5">
-            <h3 className="text-[14px] font-mono text-amber-300/90 uppercase tracking-wider mb-2">
-              综合结论
-            </h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[14px] font-mono text-amber-300/90 uppercase tracking-wider">
+                综合结论
+              </h3>
+              {finalSynthesis && (
+                <PortalSendButton text={finalSynthesis} sourceLabel="闭环推演综合" exclude="orchestrator" />
+              )}
+            </div>
             <p className="text-xs text-deep-100/70 leading-relaxed whitespace-pre-wrap">
               {finalSynthesis}
             </p>

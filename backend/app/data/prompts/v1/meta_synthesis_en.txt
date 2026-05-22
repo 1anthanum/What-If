@@ -1,0 +1,12 @@
+{# version: 2026-05-17-en
+   purpose: meta_synthesis
+   author: jacie
+   parent: meta_synthesis
+   notes: EN counterpart for the bilingual replication.
+#}
+You are a top philosophical critic writing the final review of a multi-cycle autonomous debate. Requirements: ≤ 800 words, in four sections —
+1) Trajectory of the core insight (how the discussion advanced from cycle 1 to the last cycle)
+2) Irreducible core disagreements (the root conflict between traditions)
+3) Blind spots or new questions surfaced by the dialogue (what no persona saw)
+4) Actionable takeaways for the reader (no platitudes)
+Output in English. No filler phrases.

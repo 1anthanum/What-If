@@ -63,7 +63,14 @@ class AutoLoopRequest(BaseModel):
     adversarial: bool = False
     extract_stances: bool = False
     branching: bool = False
-    flip_stance: bool = False  # cycle ≥2: each persona argues against own tradition
+    flip_stance: bool = False           # cycle ≥2: each persona argues against own tradition
+    subq_decomposition: bool = False    # A. decompose into 2-4 sub-questions, debate each, synthesize
+    self_reflection: bool = False        # B. each persona self-critiques after speaking
+    subdomain_routing: bool = False      # C. route each sub-question to best-matched provider (needs A)
+    judge_verdict: bool = False          # after synthesis, emit explicit verdicts on contested points
+    # User-customized persona system prompts. Map persona_id → full prompt text.
+    # Missing keys fall back to the built-in defaults.
+    persona_overrides: dict[str, str] | None = None
 
 
 @router.post("/auto-loop")
@@ -90,6 +97,11 @@ async def run_auto_loop(req: AutoLoopRequest):
             extract_stances=req.extract_stances,
             branching=req.branching,
             flip_stance=req.flip_stance,
+            subq_decomposition=req.subq_decomposition,
+            self_reflection=req.self_reflection,
+            subdomain_routing=req.subdomain_routing,
+            judge_verdict=req.judge_verdict,
+            persona_overrides=req.persona_overrides,
         )
     )
 
@@ -338,6 +350,96 @@ async def decompose_topic(body: dict):
         "reasoning": str(parsed.get("reasoning", ""))[:120],
         "sub_topics": subs,
     }
+
+
+@router.get("/personas")
+async def list_personas():
+    """Return the built-in philosophical persona registry — id, name, role,
+    and the default system prompt. The UI uses this to populate a per-user
+    editor; edits are sent back as `persona_overrides` on auto-loop start."""
+    from app.services.auto_loop import PHILOSOPHICAL_PERSONAS, ADVERSARIAL_SYSTEM_PROMPT
+    items = [
+        {
+            "id": p["id"],
+            "name": p["name"],
+            "role": p["role"],
+            "system_prompt": p["system_prompt"],
+        }
+        for p in PHILOSOPHICAL_PERSONAS
+    ]
+    items.append({
+        "id": "adversary",
+        "name": "魔鬼代言人",
+        "role": "对抗性分析",
+        "system_prompt": ADVERSARIAL_SYSTEM_PROMPT,
+    })
+    return {"personas": items}
+
+
+@router.post("/topic/analogies")
+async def find_analogies(body: dict):
+    """Find 3-5 structurally analogous historical / cross-domain cases for a
+    given hypothesis. The user can pick one to inject as additional debate
+    context — activates the LLM's analogical-reasoning capacity that's
+    otherwise dormant on novel questions.
+    """
+    import json as _json, re as _re
+    from app.core.inference import get_judge_backend
+
+    topic = (body.get("topic") or "").strip()
+    if not topic:
+        raise HTTPException(400, "topic required")
+
+    backend = get_judge_backend(_autonomous.tracker)
+    system = (
+        "你是一位类比推理专家。给定一个 what-if 议题，找出 3-5 个**结构同构**的"
+        "历史 / 跨领域案例 —— 表面话题不同，但底层动力学相似（相同的利益冲突结构、"
+        "相同的协调失败模式、相同的技术-制度时差等）。\n\n"
+        "目标是激活类比推理：辩论中可以借鉴这些先例的经验教训，而不是从零思考。\n\n"
+        "严格输出 JSON：\n"
+        "{\n"
+        "  \"analogies\": [\n"
+        "    {\n"
+        "      \"title\": \"≤25 字的案例名（如『美国 1880s 反托拉斯立法』）\",\n"
+        "      \"era\": \"时代 / 领域，≤15 字\",\n"
+        "      \"why_analogous\": \"为什么这是结构同构（≤60 字，指明共享的底层动力学）\",\n"
+        "      \"key_lesson\": \"≤50 字的关键教训\",\n"
+        "      \"key_difference\": \"≤40 字的重要不同（避免错误外推）\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "至少 3 个、至多 5 个。选取要多样化（不同时代 / 不同领域），避免全都来自同一时期。"
+        "只输出 JSON，不要 markdown。"
+    )
+    try:
+        raw = await backend.complete(
+            system_prompt=system,
+            messages=[{"role": "user", "content": f"议题：{topic}"}],
+            max_tokens=1500, temperature=0.6,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"analogies backend error: {e}")
+    raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+    raw = _re.sub(r"```\s*$", "", raw)
+    m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if not m:
+        return {"analogies": []}
+    try:
+        parsed = _json.loads(m.group(0))
+    except _json.JSONDecodeError:
+        return {"analogies": []}
+    out = []
+    for a in (parsed.get("analogies") or [])[:5]:
+        if not isinstance(a, dict):
+            continue
+        out.append({
+            "title": str(a.get("title", ""))[:80],
+            "era": str(a.get("era", ""))[:30],
+            "why_analogous": str(a.get("why_analogous", ""))[:200],
+            "key_lesson": str(a.get("key_lesson", ""))[:200],
+            "key_difference": str(a.get("key_difference", ""))[:200],
+        })
+    return {"analogies": out}
 
 
 @router.get("/auto-loop/_logs")

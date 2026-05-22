@@ -1,4 +1,5 @@
 import { useCounterfactualStore } from '../../store/counterfactualStore';
+import { PortalSendButton } from '../common/PortalSendButton';
 
 const DOMAIN_LABELS: Record<string, string> = {
   agriculture: '农业',
@@ -154,9 +155,12 @@ export function CounterfactualPanel() {
       {status === 'complete' && explorationMode === 'single' && summary && (
         <div className="glass border border-amber-300/40 rounded-lg p-4 space-y-4">
           <div>
-            <h4 className="text-[14px] font-mono text-amber-300/85 uppercase tracking-wider mb-2">
-              分析摘要
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-[14px] font-mono text-amber-300/85 uppercase tracking-wider">
+                分析摘要
+              </h4>
+              <PortalSendButton text={summary} sourceLabel="反事实分析摘要" exclude="counterfactual" />
+            </div>
             <p className="text-xs text-deep-100/70 leading-relaxed whitespace-pre-line">
               {summary}
             </p>

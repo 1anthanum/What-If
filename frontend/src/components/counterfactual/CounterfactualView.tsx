@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useCounterfactualStore } from '../../store/counterfactualStore';
+import { usePortalStore } from '../../store/portalStore';
 import { Timeline } from './Timeline';
 import { CounterfactualPanel } from './CounterfactualPanel';
 import { PossibilityFan } from './PossibilityFan';
@@ -41,6 +42,18 @@ export function CounterfactualView() {
 
   const [timeHorizon, setTimeHorizon] = useState('30 years');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [portalSource, setPortalSource] = useState<string | null>(null);
+
+  // Consume portal payload — text from another module becomes the modification.
+  const portalPending = usePortalStore((s) => s.pending);
+  const consumePortal = usePortalStore((s) => s.consume);
+  useEffect(() => {
+    if (!portalPending || portalPending.target !== 'counterfactual') return;
+    const payload = consumePortal('counterfactual');
+    if (!payload) return;
+    store.setModification(payload.text);
+    setPortalSource(payload.sourceLabel);
+  }, [portalPending, consumePortal, store]);
 
   const BASIC_MODES = [
     { key: 'single',  label: '单一时间线', hint: '推演一条主线' },
@@ -182,12 +195,19 @@ export function CounterfactualView() {
       {/* Modification Input (if no result yet, and not attractor mode) */}
       {explorationMode !== 'attractor' && !hasResult && !isGenerating && (
         <div className="glass border border-amber-300/35 rounded-lg p-5 space-y-4">
-          <h3 className="text-xs font-mono text-amber-300/90 uppercase tracking-wider">
-            你的反事实假设
-          </h3>
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-xs font-mono text-amber-300/90 uppercase tracking-wider">
+              你的反事实假设
+            </h3>
+            {portalSource && (
+              <span className="text-[10px] font-mono text-amber-300/85 uppercase tracking-wider px-2 py-0.5 rounded bg-amber-300/[0.06] border border-amber-300/30">
+                ⇆ 已从「{portalSource}」注入
+              </span>
+            )}
+          </div>
           <textarea
             value={modification}
-            onChange={(e) => store.setModification(e.target.value)}
+            onChange={(e) => { store.setModification(e.target.value); setPortalSource(null); }}
             placeholder="输入你想改变的历史假设..."
             rows={3}
             className="w-full bg-deep-700/30 border border-deep-400/45 rounded-lg px-4 py-3 text-sm text-white/80 placeholder:text-deep-300/65 focus:outline-none focus:border-amber-300/25 resize-none"

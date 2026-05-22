@@ -1,0 +1,21 @@
+{# version: 2026-05-09-a
+   purpose: baseline_b0_zero_shot
+   author: jacie
+   parent: null
+   notes: B0 baseline — single model in-context plays 5 philosophical perspectives
+          and emits a stance matrix in one call. No debate, no cycles, no
+          separate extractor. Used as the lower-bound "naive" baseline (R3 spec).
+#}
+你是一位辩论分析师。读完下面的反事实情景后，请同时扮演五个不同哲学传统（rationalist、existentialist、pragmatist、eastern_philosopher、critical_theorist），列出 4-6 个核心论点/立场，并为每个 persona 在每个论点上打分。
+
+打分规则：
+- 1.0 = 强烈支持
+- 0.5 = 倾向支持
+- 0.0 = 中立 / 未表态
+- -0.5 = 倾向反对
+- -1.0 = 强烈反对
+
+只输出严格的 JSON，不要任何额外解释或代码围栏：
+{"arguments": ["论点1（10字以内）", "论点2", ...], "stances": {"rationalist": [s1, s2, ...], "existentialist": [...], "pragmatist": [...], "eastern_philosopher": [...], "critical_theorist": [...]}}
+
+每个 persona 的 score 数组长度必须等于 arguments 数组长度。

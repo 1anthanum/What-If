@@ -176,11 +176,34 @@ export function PersonaCard({ personaName, personaRole, model, content, isStream
           </div>
         </div>
 
-        {/* Content */}
-        <div className="text-sm text-deep-100/75 leading-relaxed whitespace-pre-wrap pl-4">
-          {content}
-          {isStreaming && <span className="cursor-blink" />}
-        </div>
+        {/* Content — split off optional Popper falsifiability line if present */}
+        {(() => {
+          const re = /(?:^|\n)\s*\**\s*(?:可证伪线|Falsifiability\s+line)\s*[:：]\s*(.+)$/i;
+          const m = content.match(re);
+          const body = m ? content.slice(0, m.index ?? content.length).replace(/\s+$/, '') : content;
+          const falsifiability = m ? m[1].trim() : null;
+          return (
+            <>
+              <div className="text-sm text-deep-100/75 leading-relaxed whitespace-pre-wrap pl-4">
+                {body}
+                {isStreaming && <span className="cursor-blink" />}
+              </div>
+              {falsifiability && (
+                <div className="mt-3 mx-4 pt-2 border-t border-earth-green/20">
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-earth-green/80">
+                      可证伪线
+                    </span>
+                    <span className="flex-1 h-px bg-earth-green/15" />
+                  </div>
+                  <p className="text-[12px] text-earth-green/90 leading-relaxed italic">
+                    {falsifiability}
+                  </p>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Judge evaluation block */}
         {evaluation && styleBadge && (

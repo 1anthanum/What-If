@@ -10,12 +10,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAutoLoopStore, type PhilPersonaState } from '../../store/autoLoopStore';
 import { useCounterfactualStore } from '../../store/counterfactualStore';
+import { usePortalStore } from '../../store/portalStore';
 import { autoLoopApi } from '../../services/api';
 import { PHILOSOPHICAL_PRESETS, CATEGORY_META, type PhilosophicalPreset } from './PhilosophicalPresets';
 import { EvolutionChain } from './EvolutionChain';
 import { DivergenceHeatmap } from './DivergenceHeatmap';
 import { ForkingTree } from './ForkingTree';
 import { SpectatorPanel } from './SpectatorPanel';
+import { PortalSendButton } from '../common/PortalSendButton';
+import { PersonaPromptEditor } from './PersonaPromptEditor';
+import { usePersonaPromptStore } from '../../store/personaPromptStore';
 import type { AutoLoopConfig, AutoLoopMode } from '../../services/api';
 
 const PERSONA_COLORS: Record<string, string> = {
@@ -62,14 +66,42 @@ export function AutoLoopView() {
   const [stanceEnabled, setStanceEnabled] = useState(false);
   const [branchingEnabled, setBranchingEnabled] = useState(false);
   const [flipStanceEnabled, setFlipStanceEnabled] = useState(false);
+  const [subqDecomp, setSubqDecomp] = useState(false);
+  const [selfReflection, setSelfReflection] = useState(false);
+  const [subdomainRouting, setSubdomainRouting] = useState(false);
+  const [judgeVerdictEnabled, setJudgeVerdictEnabled] = useState(false);
+  // Stance prediction game — before debate, predict each persona's stance.
+  // Saved in component state so it survives across the running cycle and the
+  // PersonaCard render can show "你预测：X" next to actual content.
+  const [predictionEnabled, setPredictionEnabled] = useState(false);
+  type StancePred = 'support' | 'oppose' | 'neutral';
+  const [stancePredictions, setStancePredictions] = useState<Record<string, StancePred>>({});
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const editedPersonaIds = usePersonaPromptStore((s) => s.editedIds);
+  const overridePayload = usePersonaPromptStore((s) => s.overridePayload);
   // Philosophical presets
   const [presetCategory, setPresetCategory] = useState<PhilosophicalPreset['category'] | 'all'>('all');
   const [presetsCollapsed, setPresetsCollapsed] = useState(false);
   // Topic utility state
   const [critique, setCritique] = useState<import('../../services/api').TopicCritique | null>(null);
   const [decomposition, setDecomposition] = useState<import('../../services/api').TopicDecomposition | null>(null);
-  const [topicBusy, setTopicBusy] = useState<'critique' | 'decompose' | null>(null);
+  const [analogies, setAnalogies] = useState<import('../../services/api').TopicAnalogies | null>(null);
+  const [topicBusy, setTopicBusy] = useState<'critique' | 'decompose' | 'analogies' | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [portalSource, setPortalSource] = useState<string | null>(null);
+
+  // Consume portal payload from other modules — becomes the seed hypothesis.
+  const portalPending = usePortalStore((s) => s.pending);
+  const consumePortal = usePortalStore((s) => s.consume);
+  useEffect(() => {
+    if (!portalPending || portalPending.target !== 'orchestrator') return;
+    const payload = consumePortal('orchestrator');
+    if (!payload) return;
+    setSeedInput(payload.text);
+    setCritique(null);
+    setDecomposition(null);
+    setPortalSource(payload.sourceLabel);
+  }, [portalPending, consumePortal]);
 
   // Elapsed timer
   useEffect(() => {
@@ -105,7 +137,22 @@ export function AutoLoopView() {
       extract_stances: configMode === 'philosophical' ? stanceEnabled : false,
       branching: configMode === 'philosophical' ? branchingEnabled : false,
       flip_stance: configMode === 'philosophical' ? flipStanceEnabled : false,
+      subq_decomposition: configMode === 'philosophical' ? subqDecomp : false,
+      self_reflection: configMode === 'philosophical' ? selfReflection : false,
+      subdomain_routing: configMode === 'philosophical' ? (subqDecomp && subdomainRouting) : false,
+      judge_verdict: configMode === 'philosophical' ? judgeVerdictEnabled : false,
     } as AutoLoopConfig & { flip_stance?: boolean };
+    // Include persona overrides (only applies in philosophical mode where personas matter).
+    if (configMode === 'philosophical') {
+      const activeIds = [
+        'rationalist', 'existentialist', 'pragmatist', 'eastern_philosopher',
+        adversarialEnabled ? 'adversary' : 'critical_theorist',
+      ];
+      const overrides = overridePayload(activeIds);
+      if (Object.keys(overrides).length > 0) {
+        (config as any).persona_overrides = overrides;
+      }
+    }
     store.start(config);
   };
 
@@ -303,12 +350,19 @@ export function AutoLoopView() {
               })()}
 
               <div>
-                <label className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider mb-1.5 block">
-                  {configMode === 'philosophical' ? '哲学问题 — 对话的起点' : '种子假设 — 探索的起点'}
-                </label>
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <label className="text-[14px] font-mono text-deep-200/85 uppercase tracking-wider block">
+                    {configMode === 'philosophical' ? '哲学问题 — 对话的起点' : '种子假设 — 探索的起点'}
+                  </label>
+                  {portalSource && (
+                    <span className="text-[10px] font-mono text-amber-300/85 uppercase tracking-wider px-2 py-0.5 rounded bg-amber-300/[0.06] border border-amber-300/30">
+                      ⇆ 已从「{portalSource}」注入
+                    </span>
+                  )}
+                </div>
                 <textarea
                   value={seedInput}
-                  onChange={(e) => { setSeedInput(e.target.value); setCritique(null); setDecomposition(null); }}
+                  onChange={(e) => { setSeedInput(e.target.value); setCritique(null); setDecomposition(null); setAnalogies(null); setPortalSource(null); }}
                   placeholder={
                     configMode === 'philosophical'
                       ? '例如：自由意志是否存在？如果一切行为都由因果链决定，道德责任是否是一种幻觉？'
@@ -352,10 +406,26 @@ export function AutoLoopView() {
                   >
                     {topicBusy === 'decompose' ? '拆分中…' : '🔀 拆分议题'}
                   </button>
-                  {(critique || decomposition) && (
+                  <button
+                    type="button"
+                    disabled={!seedInput.trim() || topicBusy !== null}
+                    onClick={async () => {
+                      setTopicBusy('analogies');
+                      try {
+                        const r = await (await import('../../services/api')).topicApi.analogies(seedInput.trim());
+                        setAnalogies(r);
+                      } catch (e) { console.error(e); }
+                      finally { setTopicBusy(null); }
+                    }}
+                    className="text-[11px] font-mono tracking-[0.16em] px-3 py-1.5 rounded border border-deep-400/45 text-deep-100 hover:border-amber-300/55 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="找 3-5 个结构同构的历史/跨域案例（Sonnet）"
+                  >
+                    {topicBusy === 'analogies' ? '查找中…' : '🔗 找类比'}
+                  </button>
+                  {(critique || decomposition || analogies) && (
                     <button
                       type="button"
-                      onClick={() => { setCritique(null); setDecomposition(null); }}
+                      onClick={() => { setCritique(null); setDecomposition(null); setAnalogies(null); }}
                       className="ml-auto text-[10px] font-mono text-deep-300 hover:text-amber-300 px-2 py-1"
                     >✕ 清空</button>
                   )}
@@ -436,14 +506,88 @@ export function AutoLoopView() {
                     )}
                   </div>
                 )}
+
+                {/* Analogies result — 3-5 structural parallels */}
+                {analogies && (
+                  <div className="mt-2 rounded-lg bg-blue-400/[0.04] border border-blue-400/30 p-3 animate-fade-in-up text-[12px]">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="font-mono tracking-[0.2em] text-blue-400/95 uppercase text-[10px]">
+                        🔗 结构同构案例
+                      </span>
+                      <span className="font-mono text-[10px] text-deep-300">
+                        {analogies.analogies.length} 个 · 点「以此为类比」追加到种子
+                      </span>
+                    </div>
+                    {analogies.analogies.length === 0 ? (
+                      <p className="text-[11px] text-deep-300 italic">未找到合适的类比 — 议题可能过于具体或语义模糊</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {analogies.analogies.map((a, i) => (
+                          <div key={i} className="rounded bg-deep-900/50 border border-deep-400/30 px-2.5 py-2">
+                            <div className="flex items-start gap-2">
+                              <span className="font-mono text-[10px] text-blue-400/85 shrink-0 mt-0.5 tabular-nums">{i + 1}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-2 mb-0.5">
+                                  <p className="text-deep-50 font-medium">{a.title}</p>
+                                  {a.era && (
+                                    <span className="text-[9px] font-mono text-deep-300 uppercase tracking-wider shrink-0">
+                                      {a.era}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-deep-200/85 leading-snug">
+                                  <span className="text-blue-400/85 font-mono">同构：</span>{a.why_analogous}
+                                </p>
+                                {a.key_lesson && (
+                                  <p className="text-[11px] text-earth-green/80 leading-snug mt-0.5">
+                                    <span className="font-mono text-earth-green/65">教训：</span>{a.key_lesson}
+                                  </p>
+                                )}
+                                {a.key_difference && (
+                                  <p className="text-[11px] text-earth-rust/75 leading-snug mt-0.5">
+                                    <span className="font-mono text-earth-rust/60">不同：</span>{a.key_difference}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const inject = `${seedInput.trim()}\n\n参考类比：${a.title}（${a.era}）— ${a.why_analogous} 教训：${a.key_lesson}`;
+                                  setSeedInput(inject);
+                                  setAnalogies(null);
+                                }}
+                                className="text-[10px] font-mono px-2 py-1 rounded border border-blue-400/45 text-blue-400 hover:bg-blue-400/[0.06] shrink-0"
+                                title="把此类比追加到种子问题，辩论时可参考"
+                              >
+                                以此为类比
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Philosophical mode: persona preview */}
               {configMode === 'philosophical' && (
                 <div className="bg-deep-700/20 border border-deep-400/35 rounded-lg px-4 py-3">
-                  <span className="text-[15px] font-mono text-deep-200/75 uppercase tracking-wider block mb-2">
-                    参与辩论的哲学流派
-                  </span>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="text-[15px] font-mono text-deep-200/75 uppercase tracking-wider">
+                      参与辩论的哲学流派
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPromptEditorOpen(true)}
+                      className="text-[11px] font-mono uppercase tracking-[0.16em] text-amber-300/85 hover:text-amber-200 px-2.5 py-1 rounded border border-amber-300/35 hover:border-amber-300/65 hover:bg-amber-300/[0.05] transition-colors"
+                      title="自定义每位 persona 的 system prompt"
+                    >
+                      ✎ 编辑 persona{editedPersonaIds.length > 0 && (
+                        <span className="ml-1.5 text-[9px] tabular-nums">({editedPersonaIds.length})</span>
+                      )}
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {[
                       { id: 'rationalist', name: '理性主义' },
@@ -459,6 +603,63 @@ export function AutoLoopView() {
                         {PERSONA_ICONS[p.id] ?? '◇'} {p.name}
                       </span>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Stance prediction game — predict each persona's stance before debate starts */}
+              {configMode === 'philosophical' && predictionEnabled && seedInput.trim() && (
+                <div className="bg-blue-400/[0.04] border border-blue-400/30 rounded-lg px-4 py-3.5 space-y-2.5 animate-fade-in">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[12px] font-mono text-blue-400/90 uppercase tracking-wider">
+                      🎯 先猜立场再开始
+                    </span>
+                    <span className="text-[10px] font-mono text-deep-200/55 tabular-nums">
+                      {Object.keys(stancePredictions).length} / 5
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-deep-200/65 leading-relaxed">
+                    在让 LLM 辩论前，先点选每位 persona 你认为会持的立场。结束后会逐个对比实际发言。
+                  </p>
+                  <div className="space-y-1.5">
+                    {[
+                      { id: 'rationalist', name: '理性主义' },
+                      { id: 'existentialist', name: '存在主义' },
+                      { id: 'pragmatist', name: '实用主义' },
+                      { id: 'eastern_philosopher', name: '东方哲学' },
+                      { id: adversarialEnabled ? 'adversary' : 'critical_theorist', name: adversarialEnabled ? '魔鬼代言人' : '批判理论' },
+                    ].map((p) => {
+                      const sel = stancePredictions[p.id];
+                      const options: Array<{ key: StancePred; label: string; activeClass: string }> = [
+                        { key: 'support', label: '支持', activeClass: 'border-earth-green/65 bg-earth-green/[0.10] text-earth-green/90' },
+                        { key: 'neutral', label: '中立', activeClass: 'border-deep-200/55 bg-deep-200/[0.08] text-deep-50' },
+                        { key: 'oppose',  label: '反对', activeClass: 'border-earth-rust/65 bg-earth-rust/[0.10] text-earth-rust/90' },
+                      ];
+                      return (
+                        <div key={p.id} className="flex items-center gap-2">
+                          <span className={`text-[12px] font-mono w-32 shrink-0 ${PERSONA_COLORS[p.id]?.split(' ')[0] ?? 'text-deep-200/80'}`}>
+                            {PERSONA_ICONS[p.id] ?? '◇'} {p.name}
+                          </span>
+                          {options.map((opt) => {
+                            const active = sel === opt.key;
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setStancePredictions((s) => ({ ...s, [p.id]: opt.key }))}
+                                className={`text-[11px] font-mono px-2 py-1 rounded border transition-colors ${
+                                  active
+                                    ? opt.activeClass
+                                    : 'border-deep-400/30 text-deep-200/65 hover:border-deep-400/55 hover:text-deep-100'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -497,6 +698,41 @@ export function AutoLoopView() {
                       enabled={flipStanceEnabled}
                       onToggle={setFlipStanceEnabled}
                       color="purple"
+                    />
+                    <FeatureToggle
+                      label="🌳 子问题分解"
+                      description="A — 先拆议题成 2-4 个正交子问题，各自辩论再汇总（双层深度，~2-3x 成本）"
+                      enabled={subqDecomp}
+                      onToggle={setSubqDecomp}
+                      color="amber"
+                    />
+                    <FeatureToggle
+                      label="🪞 自反思"
+                      description="B — 每个 persona 发言后再调一次同模型，自识隐含假设和被忽视的反方观点"
+                      enabled={selfReflection}
+                      onToggle={setSelfReflection}
+                      color="blue"
+                    />
+                    <FeatureToggle
+                      label="🎯 子领域路由"
+                      description="C — 仅在 A 开启时生效：每个子问题按 domain 自动选最匹配 provider"
+                      enabled={subdomainRouting && subqDecomp}
+                      onToggle={setSubdomainRouting}
+                      color="purple"
+                    />
+                    <FeatureToggle
+                      label="⚖ 裁决"
+                      description="每轮综合后让裁判明确给出各争议点的胜出立场+理由（结构化输出）"
+                      enabled={judgeVerdictEnabled}
+                      onToggle={setJudgeVerdictEnabled}
+                      color="amber"
+                    />
+                    <FeatureToggle
+                      label="🎯 立场预测"
+                      description="开始前你先猜每位 persona 会如何站队；结束后对比实际发言"
+                      enabled={predictionEnabled}
+                      onToggle={setPredictionEnabled}
+                      color="blue"
                     />
                   </div>
                 </div>
@@ -659,6 +895,7 @@ export function AutoLoopView() {
                     key={p.id}
                     persona={p}
                     isActive={p.id === activePersonaId}
+                    prediction={stancePredictions[p.id]}
                   />
                 ))}
               </div>
@@ -844,6 +1081,9 @@ export function AutoLoopView() {
                     撰写中…
                   </span>
                 )}
+                {finalSynthesis && (
+                  <PortalSendButton text={finalSynthesis} sourceLabel="Opus 元综合" exclude="orchestrator" />
+                )}
               </div>
               {finalSynthesis ? (
                 <div className="text-[15px] text-deep-50 leading-relaxed whitespace-pre-wrap">
@@ -882,15 +1122,38 @@ export function AutoLoopView() {
           <EvolutionChain />
         </div>
       )}
+
+      {/* Persona prompt editor — opens from "✎ 编辑 persona" button. */}
+      {promptEditorOpen && (
+        <PersonaPromptEditor onClose={() => setPromptEditorOpen(false)} />
+      )}
     </div>
   );
 }
 
 /* ──── Persona Card (live streaming during philosophical debate) ──── */
 
-function PersonaCard({ persona, isActive }: { persona: PhilPersonaState; isActive: boolean }) {
+/** Detect the Popper falsifiability line and split it off from the main body.
+ *  Matches both Chinese "可证伪线：" and English "Falsifiability line:" forms. */
+function splitFalsifiability(content: string): { body: string; falsifiability: string | null } {
+  const re = /(?:^|\n)\s*\**\s*(?:可证伪线|Falsifiability\s+line)\s*[:：]\s*(.+)$/i;
+  const m = content.match(re);
+  if (!m) return { body: content, falsifiability: null };
+  const body = content.slice(0, m.index ?? content.length).replace(/\s+$/, '');
+  return { body, falsifiability: m[1].trim() };
+}
+
+function PersonaCard({ persona, isActive, prediction }: { persona: PhilPersonaState; isActive: boolean; prediction?: 'support' | 'oppose' | 'neutral' }) {
   const colorClass = PERSONA_COLORS[persona.id] ?? 'text-deep-200/50 border-deep-400/45 bg-deep-600/5';
   const icon = PERSONA_ICONS[persona.id] ?? '◇';
+  const { body, falsifiability } = splitFalsifiability(persona.content);
+  const dogmatic = !persona.streaming && persona.content.length > 0 && falsifiability === null;
+  const predLabel = prediction === 'support' ? '支持' : prediction === 'oppose' ? '反对' : prediction === 'neutral' ? '中立' : null;
+  const predClass = prediction === 'support'
+    ? 'border-earth-green/40 bg-earth-green/[0.08] text-earth-green/90'
+    : prediction === 'oppose'
+      ? 'border-earth-rust/40 bg-earth-rust/[0.08] text-earth-rust/90'
+      : 'border-deep-400/40 bg-deep-700/20 text-deep-100/85';
 
   return (
     <div className={`glass border rounded-lg p-4 transition-all duration-300 ${
@@ -902,20 +1165,57 @@ function PersonaCard({ persona, isActive }: { persona: PhilPersonaState; isActiv
           {persona.name}
         </span>
         <span className="text-[14px] font-mono text-deep-200/65">{persona.model}</span>
+        {predLabel && (
+          <span
+            className={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border ${predClass}`}
+            title="你开始前的预测立场"
+          >
+            🎯 你猜：{predLabel}
+          </span>
+        )}
+        {falsifiability && (
+          <span
+            className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-earth-green/40 bg-earth-green/[0.08] text-earth-green/90"
+            title="该发言给出了可证伪线 — 符合 Popper 标准"
+          >
+            ✓ 可证伪
+          </span>
+        )}
+        {dogmatic && (
+          <span
+            className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-earth-rust/40 bg-earth-rust/[0.08] text-earth-rust/90"
+            title="该发言未给出可证伪线 — 论证封闭"
+          >
+            ⚠ 教条
+          </span>
+        )}
         {persona.streaming && (
           <span className="ml-auto w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
         )}
-        {!persona.streaming && persona.content && (
+        {!persona.streaming && persona.content && !falsifiability && !dogmatic && (
           <span className="ml-auto text-[14px] font-mono text-deep-200/65">✓</span>
         )}
       </div>
-      {persona.content && (
+      {body && (
         <p className={`text-[15px] leading-relaxed whitespace-pre-wrap ${
           isActive ? 'text-deep-100/70' : 'text-deep-200/85'
         }`}>
-          {persona.content}
+          {body}
           {persona.streaming && <span className="cursor-blink" />}
         </p>
+      )}
+      {falsifiability && (
+        <div className="mt-3 pt-3 border-t border-earth-green/15">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-[9px] font-mono uppercase tracking-wider text-earth-green/75">
+              可证伪线
+            </span>
+            <span className="flex-1 h-px bg-earth-green/15" />
+          </div>
+          <p className="text-[13px] text-earth-green/90 leading-relaxed italic">
+            {falsifiability}
+          </p>
+        </div>
       )}
     </div>
   );
@@ -951,7 +1251,65 @@ function CycleDetail({ cycle }: { cycle: import('../../store/autoLoopStore').Cyc
 
       {expanded && (
         <div className="mt-3 pt-3 border-t border-deep-400/35 space-y-3 pl-9">
-          {cycle.personas.map((p) => (
+          {/* Method A: Sub-questions section */}
+          {cycle.subQuestions && cycle.subQuestions.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[12px] font-mono tracking-[0.20em] text-amber-300/95 uppercase">
+                  🌳 子问题分解 · {cycle.subQuestions.length}
+                </span>
+                {cycle.subdomainRouting && (
+                  <span className="text-[10px] font-mono tk-cool-soft px-1.5 py-0.5 rounded tk-cool-bg border">
+                    🎯 子领域路由
+                  </span>
+                )}
+              </div>
+              {cycle.subQuestions.map(sq => (
+                <div key={sq.idx} className="rounded bg-deep-800/40 border tk-border-faint p-3">
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="text-[13px] font-medium text-amber-200">
+                      <span className="font-mono text-[10px] text-amber-300/85 mr-1.5">SQ{sq.idx + 1}</span>
+                      {sq.title}
+                    </span>
+                    <span className="text-[10px] font-mono tk-cool-soft px-1.5 py-0.5 rounded tk-cool-bg border">
+                      {sq.domain}
+                    </span>
+                  </div>
+                  <p className="text-[12px] tk-text-secondary mb-2 leading-snug">{sq.question}</p>
+                  <div className="space-y-1.5">
+                    {sq.personas.map(p => (
+                      <div key={p.id} className="rounded bg-deep-900/40 px-2 py-1.5">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className={`text-[12px] ${PERSONA_COLORS[p.id]?.split(' ')[0] ?? 'text-deep-200/50'}`}>
+                            {PERSONA_ICONS[p.id] ?? '◇'}
+                          </span>
+                          <span className="text-[12px] font-mono tk-text-secondary">{p.name}</span>
+                          <span className="text-[10px] font-mono tk-cool-soft ml-auto">{p.model}</span>
+                        </div>
+                        <p className="text-[12px] tk-text-muted leading-snug whitespace-pre-wrap">{p.content}{p.streaming && <span className="cursor-blink" />}</p>
+                        {p.reflection && (
+                          <div className="mt-1 pl-2 border-l-2 border-blue-400/35 text-[11px] tk-cool-soft italic leading-snug whitespace-pre-wrap">
+                            🪞 {p.reflection}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {sq.synthesis && (
+                    <div className="mt-2 pt-2 border-t border-amber-300/15">
+                      <span className="text-[10px] font-mono text-amber-300/85 tracking-wider uppercase mb-1 block">
+                        ◆ 子综合
+                      </span>
+                      <p className="text-[12px] tk-text-secondary leading-relaxed whitespace-pre-wrap">{sq.synthesis}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Regular personas (non-subq path) */}
+          {(!cycle.subQuestions || cycle.subQuestions.length === 0) && cycle.personas.map((p) => (
             <div key={p.id} className="space-y-1">
               <div className="flex items-center gap-1.5">
                 <span className={`text-[14px] ${PERSONA_COLORS[p.id]?.split(' ')[0] ?? 'text-deep-200/50'}`}>
@@ -965,6 +1323,11 @@ function CycleDetail({ cycle }: { cycle: import('../../store/autoLoopStore').Cyc
               <p className="text-[14px] text-deep-200/45 leading-relaxed whitespace-pre-wrap">
                 {p.content}
               </p>
+              {p.reflection && (
+                <div className="mt-1 ml-4 pl-2 border-l-2 border-blue-400/35 text-[12px] tk-cool-soft italic leading-snug whitespace-pre-wrap">
+                  🪞 {p.reflection}
+                </div>
+              )}
             </div>
           ))}
 
@@ -976,6 +1339,58 @@ function CycleDetail({ cycle }: { cycle: import('../../store/autoLoopStore').Cyc
               <p className="text-[14px] text-deep-100/55 leading-relaxed whitespace-pre-wrap">
                 {cycle.synthesisPreview}
               </p>
+            </div>
+          )}
+
+          {cycle.judgeVerdict && cycle.judgeVerdict.verdicts && cycle.judgeVerdict.verdicts.length > 0 && (
+            <div className="bg-amber-300/[0.04] border border-amber-300/25 rounded-lg p-3.5">
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[12px] font-mono text-amber-300/90 uppercase tracking-wider">
+                  ⚖ 裁决
+                </span>
+                <span className="flex-1 h-px bg-amber-300/15" />
+              </div>
+              <div className="space-y-2.5">
+                {cycle.judgeVerdict.verdicts.map((v, i) => (
+                  <div key={i} className="border-l-2 border-amber-300/30 pl-3">
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <span className="text-[11px] font-mono text-amber-300/65 tabular-nums">#{i + 1}</span>
+                      <span className="text-[13px] text-deep-50 font-medium">{v.contested_point}</span>
+                      <span className="ml-auto text-[10px] font-mono text-amber-300/65" title="裁判信心度">
+                        {'★'.repeat(Math.max(0, Math.min(5, v.confidence)))}
+                      </span>
+                    </div>
+                    <div className="text-[12px] text-deep-100/80 leading-relaxed">
+                      <span className="text-earth-green/85 font-medium">胜出：</span>
+                      {v.winning_position}
+                      {v.winning_personas?.length > 0 && (
+                        <span className="ml-1.5 text-[10px] font-mono text-amber-300/75">
+                          ({v.winning_personas.join('、')})
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[12px] text-deep-200/75 leading-relaxed italic mt-1">
+                      {v.verdict_reason}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {(cycle.judgeVerdict.overall_strongest || cycle.judgeVerdict.overall_weakest) && (
+                <div className="mt-3 pt-2.5 border-t border-amber-300/15 flex flex-col sm:flex-row gap-2 text-[11px]">
+                  {cycle.judgeVerdict.overall_strongest && (
+                    <div className="flex-1">
+                      <span className="text-earth-green/85 font-mono uppercase tracking-wider">最强：</span>
+                      <span className="text-deep-100/85"> {cycle.judgeVerdict.overall_strongest.persona_id} — {cycle.judgeVerdict.overall_strongest.reason}</span>
+                    </div>
+                  )}
+                  {cycle.judgeVerdict.overall_weakest && (
+                    <div className="flex-1">
+                      <span className="text-earth-rust/85 font-mono uppercase tracking-wider">最弱：</span>
+                      <span className="text-deep-100/85"> {cycle.judgeVerdict.overall_weakest.persona_id} — {cycle.judgeVerdict.overall_weakest.reason}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

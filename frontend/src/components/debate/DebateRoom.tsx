@@ -5,6 +5,7 @@ import { debateApi } from '../../services/api';
 import { PersonaCard } from './PersonaCard';
 import { EventInjector } from './EventInjector';
 import { SummaryDock } from './SummaryDock';
+import { PortalSendButton } from '../common/PortalSendButton';
 
 export function DebateRoom() {
   const {
@@ -261,6 +262,7 @@ export function DebateRoom() {
                   ⚖ JUDGE: {judgeModel}
                 </span>
               )}
+              <PortalSendButton text={summary} sourceLabel="辩论室总结" exclude="debate" />
             </div>
             <div className="text-sm text-deep-100/75 leading-relaxed whitespace-pre-wrap">
               {summary}

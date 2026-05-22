@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDebateStore } from '../../store/debateStore';
+import { useOnboardingStore } from '../../store/onboardingStore';
+import { usePortalStore } from '../../store/portalStore';
 import { Button } from './ui';
 
 type Scenario = {
@@ -135,6 +137,36 @@ export function ScenarioInput() {
   /** Browse mode: 'featured' shows 3 hand-picked cards; 'all' opens the full grid. */
   const [browseMode, setBrowseMode] = useState<'featured' | 'all'>('featured');
   const { startDebate, status, error } = useDebateStore();
+  const { pendingDraft, setPendingDraft } = useOnboardingStore();
+
+  // Consume onboarding draft once.
+  useEffect(() => {
+    if (!pendingDraft) return;
+    setTitle(pendingDraft.title);
+    setHypothesis(pendingDraft.hypothesis);
+    setDomain(pendingDraft.domain);
+    const matched = EXAMPLE_SCENARIOS.find(
+      (s) => s.hypothesis === pendingDraft.hypothesis,
+    );
+    if (matched) {
+      setSelectedPreset(matched);
+      setPickerCollapsed(true);
+    }
+    setPendingDraft(null);
+  }, [pendingDraft, setPendingDraft]);
+
+  // Consume portal payload (e.g. text sent from another module).
+  const portalPending = usePortalStore((s) => s.pending);
+  const consumePortal = usePortalStore((s) => s.consume);
+  const [portalSource, setPortalSource] = useState<string | null>(null);
+  useEffect(() => {
+    if (!portalPending || portalPending.target !== 'debate') return;
+    const payload = consumePortal('debate');
+    if (!payload) return;
+    setHypothesis(payload.text);
+    setTitle(payload.text.slice(0, 20));
+    setPortalSource(payload.sourceLabel);
+  }, [portalPending, consumePortal]);
 
   const q = search.trim().toLowerCase();
   const visibleScenarios = EXAMPLE_SCENARIOS.filter(s => {
@@ -458,12 +490,19 @@ export function ScenarioInput() {
         </div>
 
         <div>
-          <label className="block text-[11px] font-mono tk-text-muted mb-2 uppercase tracking-[0.22em]">
-            假设描述 <span className="text-amber-300/90">*</span>
-          </label>
+          <div className="flex items-baseline justify-between mb-2">
+            <label className="block text-[11px] font-mono tk-text-muted uppercase tracking-[0.22em]">
+              假设描述 <span className="text-amber-300/90">*</span>
+            </label>
+            {portalSource && (
+              <span className="text-[10px] font-mono text-amber-300/85 uppercase tracking-wider px-2 py-0.5 rounded bg-amber-300/[0.06] border border-amber-300/30">
+                ⇆ 已从「{portalSource}」注入
+              </span>
+            )}
+          </div>
           <textarea
             value={hypothesis}
-            onChange={e => setHypothesis(e.target.value)}
+            onChange={e => { setHypothesis(e.target.value); setPortalSource(null); }}
             placeholder="如果……会怎样？"
             rows={3}
             className="w-full bg-deep-700/30 border tk-border-faint rounded-lg px-4 py-3 text-sm tk-text-primary placeholder-deep-300/55 resize-none transition-all"

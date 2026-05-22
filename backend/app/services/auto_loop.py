@@ -24,6 +24,7 @@ from app.config import get_settings
 from app.core.streaming import sse_event
 from app.core.token_tracker import TokenTracker
 from app.core.inference import get_strong_backend, get_backend_for_persona
+from app.core.claude_client import cached_system
 from app.services.orchestrator import OrchestratorService
 from app.services.debate_room import DebateRoomService
 from app.schemas.orchestration import FeedbackLoopConfig
@@ -47,17 +48,63 @@ PERSONA_MODEL_PREFERENCE = {
 
 def _smart_persona_backend(tracker, persona_id: str, fallback_idx: int):
     """Pick the configured pool spec whose provider matches PERSONA_MODEL_PREFERENCE.
-    Fall back to round-robin from get_backend_for_persona on miss."""
+    Fall back to round-robin from get_backend_for_persona on miss.
+
+    Override via WHATIF_PERSONA_PROVIDER_OVERRIDE (used by the
+    randomized-pairing ablation): comma-separated `persona_id:provider`
+    list that supersedes PERSONA_MODEL_PREFERENCE for this run only.
+    """
+    import os
     from app.config import get_settings
     from app.core.inference import get_backend_from_spec, get_backend_for_persona
-    preferred = PERSONA_MODEL_PREFERENCE.get(persona_id)
+
+    override_str = os.environ.get("WHATIF_PERSONA_PROVIDER_OVERRIDE", "").strip()
+    preferred = None
+    explicit_spec = None  # full provider:model from override (e.g. "claude:claude-haiku-4-5")
+    if override_str:
+        for pair in override_str.split(","):
+            pair = pair.strip()
+            if not pair or ":" not in pair: continue
+            pid, rest = pair.split(":", 1)
+            if pid.strip() != persona_id: continue
+            rest = rest.strip()
+            if ":" in rest:
+                # Full provider:model spec (e.g. "rationalist:claude:claude-haiku-4-5-20251001")
+                explicit_spec = rest
+            else:
+                preferred = rest
+            break
+    if preferred is None and explicit_spec is None:
+        preferred = PERSONA_MODEL_PREFERENCE.get(persona_id)
+
     pool_str = getattr(get_settings(), "persona_pool", "")
+    if explicit_spec and pool_str:
+        for spec in pool_str.split(","):
+            if spec.strip() == explicit_spec:
+                return get_backend_from_spec(spec.strip(), tracker, tier="persona")
     if preferred and pool_str:
         for spec in pool_str.split(","):
             spec = spec.strip()
             if spec.startswith(f"{preferred}:"):
-                return get_backend_from_spec(spec, tracker)
+                return get_backend_from_spec(spec, tracker, tier="persona")
     return get_backend_for_persona(tracker, fallback_idx)
+
+
+def _maybe_load_en_prompt(persona_id: str, zh_fallback: str) -> str:
+    """Bilingual sensitivity: if WHATIF_LANGUAGE=en, load the EN persona
+    prompt file. Otherwise return the Chinese fallback unchanged. Used
+    for the 2026-05-17 bilingual replication; no effect when env unset.
+    """
+    import os
+    if os.environ.get("WHATIF_LANGUAGE", "").lower() != "en":
+        return zh_fallback
+    from pathlib import Path
+    p = Path(__file__).resolve().parent.parent / "data" / "prompts" / "v1" / f"persona_{persona_id}_en.txt"
+    if not p.exists(): return zh_fallback
+    text = p.read_text(encoding="utf-8")
+    # strip leading comment lines
+    lines = [ln for ln in text.splitlines() if not ln.strip().startswith("#")]
+    return "\n".join(lines).strip()
 
 
 PHILOSOPHICAL_PERSONAS = [
@@ -65,53 +112,145 @@ PHILOSOPHICAL_PERSONAS = [
         "id": "rationalist",
         "name": "理性主义者",
         "role": "分析哲学立场",
-        "system_prompt": (
+        "system_prompt": _maybe_load_en_prompt("rationalist", (
             "你是一位分析哲学传统的思想家，强调逻辑严密性、概念清晰度和可证伪性。"
             "你善于拆解模糊的主张，找出隐含前提，并用逻辑论证支持或反驳。"
             "回答时用中文，语言精炼，注重论证结构。300 字以内。"
-        ),
+        )),
     },
     {
         "id": "existentialist",
         "name": "存在主义者",
         "role": "存在主义立场",
-        "system_prompt": (
+        "system_prompt": _maybe_load_en_prompt("existentialist", (
             "你是一位受海德格尔、萨特、加缪影响的存在主义思想家。"
             "你关注人的自由、选择、焦虑和意义的建构。你认为本质先于存在是谬论，"
             "人通过行动定义自己。回答时用中文，带有思辨的激情，300 字以内。"
-        ),
+        )),
     },
     {
         "id": "pragmatist",
         "name": "实用主义者",
         "role": "实用主义立场",
-        "system_prompt": (
+        "system_prompt": _maybe_load_en_prompt("pragmatist", (
             "你是一位杜威、詹姆斯传统的实用主义者。你不关心抽象的真理本身，"
             "而关心一个信念在实践中的效果。真理是有用的工具，不是终极实在。"
             "你善于将抽象哲学问题拉回到日常生活的具体影响。中文回答，300 字以内。"
-        ),
+        )),
     },
     {
         "id": "eastern_philosopher",
         "name": "东方哲学家",
         "role": "东方哲学立场",
-        "system_prompt": (
+        "system_prompt": _maybe_load_en_prompt("eastern_philosopher", (
             "你融合了儒、释、道三家思想。你关注人与自然的和谐、修身养性、缘起性空。"
             "你的思维方式偏整体性、辩证性，不追求二元对立的答案，"
             "而寻找矛盾中的统一。中文回答，可引用经典，300 字以内。"
-        ),
+        )),
     },
     {
         "id": "critical_theorist",
         "name": "批判理论家",
         "role": "批判理论立场",
-        "system_prompt": (
+        "system_prompt": _maybe_load_en_prompt("critical_theorist", (
             "你受马克思、福柯、阿多诺等批判理论家影响。你善于揭示权力结构、"
             "意识形态与话语如何塑造所谓的'常识'。你质疑一切看似自然的事物，"
             "追问'谁受益、谁受损'。中文回答，锐利但不刻薄，300 字以内。"
-        ),
+        )),
+    },
+    # ── K=10 扩展：personas 6-10（paper-2 补充实验，2026-05-21）──
+    # 用于 WHATIF_PERSONA_K 大于 5 的情况。每个传统选了与前 5 个明显正交的
+    # 思想取向，不再走相近的哲学家。
+    {
+        "id": "virtue_ethicist",
+        "name": "美德伦理学者",
+        "role": "美德伦理立场",
+        "system_prompt": _maybe_load_en_prompt("virtue_ethicist", (
+            "你受亚里士多德、麦金太尔的美德伦理传统影响。你不问'应当做什么'，"
+            "而问'什么样的人应当做这件事'。你关注品格、习惯、目的（telos）、"
+            "实践智慧。你拒绝把伦理问题还原为规则计算。中文回答，300 字以内。"
+        )),
+    },
+    {
+        "id": "utilitarian",
+        "name": "功利主义者",
+        "role": "功利主义立场",
+        "system_prompt": _maybe_load_en_prompt("utilitarian", (
+            "你受边沁、密尔影响。你认为对一切行动的评价应基于其总体后果对"
+            "受影响者福祉的净影响。你愿意计算、比较、取舍，包括尖锐的取舍。"
+            "你警惕道德直觉伪装成原则。中文回答，逻辑清晰，300 字以内。"
+        )),
+    },
+    {
+        "id": "feminist_theorist",
+        "name": "女性主义理论家",
+        "role": "女性主义立场",
+        "system_prompt": _maybe_load_en_prompt("feminist_theorist", (
+            "你受波伏娃、巴特勒、海弗利克影响。你关注性别、身体、关怀劳动、"
+            "在话语和制度中如何被分配的（不）平等。你的提问方式是：'谁的视角"
+            "被默认为中性？谁的经验被边缘化？'。中文回答，300 字以内。"
+        )),
+    },
+    {
+        "id": "religious_traditionalist",
+        "name": "宗教传统主义者",
+        "role": "宗教传统立场",
+        "system_prompt": _maybe_load_en_prompt("religious_traditionalist", (
+            "你受托马斯·阿奎那、奥古斯丁、儒家传统影响。你认为存在超越个人偏好"
+            "的客观善与自然法；传统、礼制、神圣秩序对个体选择有约束力。你重视"
+            "代际延续与共同体的道德资本。中文回答，庄重，300 字以内。"
+        )),
+    },
+    {
+        "id": "complexity_theorist",
+        "name": "复杂系统论者",
+        "role": "复杂性立场",
+        "system_prompt": _maybe_load_en_prompt("complexity_theorist", (
+            "你受普利高津、考夫曼、Bar-Yam 的复杂系统理论影响。你看到的是非"
+            "线性反馈、涌现、相变、路径依赖。你反对线性因果推断，怀疑'最优解"
+            "存在'的假设；你看到的是吸引子和适应性景观。中文回答，300 字以内。"
+        )),
     },
 ]
+PHILOSOPHICAL_PERSONAS_FULL = PHILOSOPHICAL_PERSONAS  # alias for clarity
+
+# Popper falsifiability directive — appended to every persona's user prompt
+# so each statement is forced to surface what evidence would change its mind.
+# A response without this line gets tagged as "dogmatic" in the UI.
+FALSIFIABILITY_DIRECTIVE_ZH = (
+    "\n\n**必须在结尾另起一段加上一行**：\n"
+    "「可证伪线：__」（填入 1-2 条**具体**的证据 / 反例 / 论证，"
+    "若它们成立你会改变立场。回避或泛泛而谈视为教条主义。）"
+)
+FALSIFIABILITY_DIRECTIVE_EN = (
+    "\n\n**End your response with a separate final line**:\n"
+    "\"Falsifiability line: __\" (1-2 *concrete* pieces of evidence / counter-examples "
+    "/ arguments which, if true, would change your stance. Vague or evasive answers count as dogmatic.)"
+)
+
+# Judge prompt — invoked after synthesis to produce explicit verdicts
+# on contested points. Output is a structured JSON the UI renders.
+JUDGE_VERDICT_SYSTEM = (
+    "你是一位辩论裁判，任务是在 N 位思想家就同一哲学问题展开辩论后，"
+    "对核心**争议点**做出明确的胜出判定。\n\n"
+    "你不是综合者 —— 不要「两边都有道理」地回避。每个争议点必须给出**胜出立场**"
+    "和**胜出理由**。如果两方势均力敌，明确说出「势均力敌」并解释为什么。\n\n"
+    "严格输出 JSON：\n"
+    "{\n"
+    "  \"verdicts\": [\n"
+    "    {\n"
+    "      \"contested_point\": \"争议点的核心问题（一句话）\",\n"
+    "      \"winning_position\": \"胜出立场（短描述）\",\n"
+    "      \"winning_personas\": [\"持此立场的 persona_id\"],\n"
+    "      \"verdict_reason\": \"为什么此立场胜出（≤80 字）\",\n"
+    "      \"confidence\": 1-5\n"
+    "    }\n"
+    "  ],\n"
+    "  \"overall_strongest\": {\"persona_id\": \"\", \"reason\": \"≤60 字\"},\n"
+    "  \"overall_weakest\": {\"persona_id\": \"\", \"reason\": \"≤60 字\"}\n"
+    "}\n\n"
+    "至少识别 2 个、至多 5 个争议点。只输出 JSON，不要 markdown 围栏。"
+)
 
 # Adversarial override: replaces critical_theorist's prompt when adversarial=True
 ADVERSARIAL_SYSTEM_PROMPT = (
@@ -184,16 +323,42 @@ class AutoLoopScheduler:
         extract_stances: bool = False,
         branching: bool = False,
         flip_stance: bool = False,
+        subq_decomposition: bool = False,
+        self_reflection: bool = False,
+        subdomain_routing: bool = False,
+        shuffle_personas: bool = False,
+        shuffle_seed: int | None = None,
+        extractor_config: dict | None = None,
+        judge_verdict: bool = False,
+        persona_overrides: dict[str, str] | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Outer wrapper: tee every SSE event to a per-session JSONL log
-        for offline analysis / report export. Inner generator does the work."""
+        for offline analysis / report export. Inner generator does the work.
+
+        shuffle_personas: when True, run with a derangement-permuted persona
+            prompt set (negative control — see Y5 spec).
+        shuffle_seed: RNG seed for the persona shuffle. Required if
+            shuffle_personas is True; pass an integer to make the run reproducible.
+        extractor_config: kwargs dict for ExtractorConfig (Y4 ablation). When
+            None, the production B3 defaults apply.
+        """
         import json as _json
         import time as _time
         from app.services.autonomous_debate import RUN_LOG_DIR
 
+        if shuffle_personas and shuffle_seed is None:
+            raise ValueError("shuffle_personas=True requires shuffle_seed (int) for reproducibility")
+
         gen = self._run_impl(
             seed_hypothesis, max_cycles, mode, event_id, max_iterations_per_loop,
             time_horizon, adversarial, extract_stances, branching, flip_stance,
+            subq_decomposition=subq_decomposition,
+            self_reflection=self_reflection,
+            subdomain_routing=subdomain_routing,
+            shuffle_personas=shuffle_personas, shuffle_seed=shuffle_seed,
+            extractor_config=extractor_config,
+            judge_verdict=judge_verdict,
+            persona_overrides=persona_overrides,
         )
         # Buffer first event to learn session_id, then start writing log
         first_ev = None
@@ -231,6 +396,14 @@ class AutoLoopScheduler:
         extract_stances: bool = False,
         branching: bool = False,
         flip_stance: bool = False,
+        subq_decomposition: bool = False,
+        self_reflection: bool = False,
+        subdomain_routing: bool = False,
+        shuffle_personas: bool = False,
+        shuffle_seed: int | None = None,
+        extractor_config: dict | None = None,
+        judge_verdict: bool = False,
+        persona_overrides: dict[str, str] | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Run autonomous exploration cycles.
 
@@ -243,9 +416,61 @@ class AutoLoopScheduler:
             max_cycles = settings.auto_loop_max_cycles
         pause_seconds = settings.auto_loop_pause_seconds
 
+        # Stash overrides on self so _run_philosophical_cycle picks them up
+        # when looking up persona system_prompt. Sanitize: keep only known
+        # persona ids; cap text length to avoid abuse.
+        VALID_PERSONA_IDS = {p["id"] for p in PHILOSOPHICAL_PERSONAS} | {"adversary"}
+        clean_overrides: dict[str, str] = {}
+        if persona_overrides:
+            for pid, text in persona_overrides.items():
+                if pid in VALID_PERSONA_IDS and isinstance(text, str):
+                    clean_overrides[pid] = text.strip()[:4000]
+        self._persona_overrides = clean_overrides
+
         session_id = str(uuid.uuid4())[:8]
         result = AutoLoopResult(session_id, event_id, seed_hypothesis, mode=mode)
         self.results[session_id] = result
+
+        # Y5 negative-control: optionally shuffle persona system_prompts.
+        # Stored on self so _run_philosophical_cycle can read it without
+        # changing its signature. Concurrent runs would race on this attr,
+        # but auto-loop today is run serially per scheduler instance.
+        self._active_personas = PHILOSOPHICAL_PERSONAS
+        # Persona leave-one-out (LOO) ablation: WHATIF_DROP_PERSONA env var
+        # removes the named persona from the active set. Used to test whether
+        # any single philosophical tradition is load-bearing for CDI.
+        import os as _os_loo
+        _drop = _os_loo.environ.get("WHATIF_DROP_PERSONA", "").strip()
+        if _drop:
+            self._active_personas = [p for p in self._active_personas
+                                     if p["id"] != _drop]
+        # K-personas ablation (paper-2 supplementary, 2026-05-21):
+        # WHATIF_PERSONA_K=N slices the active persona list to the first N
+        # entries. Combined with PHILOSOPHICAL_PERSONAS extended to 10, this
+        # supports K ∈ {2..10}. The first 5 indices are unchanged from the
+        # original B3 schema, so K=5 (or unset) reproduces the headline runs.
+        _k_str = _os_loo.environ.get("WHATIF_PERSONA_K", "").strip()
+        if _k_str:
+            try:
+                _k = int(_k_str)
+                if 2 <= _k <= len(self._active_personas):
+                    self._active_personas = self._active_personas[:_k]
+            except ValueError:
+                pass
+        # Y4 ablation: per-run extractor config (dict → ExtractorConfig built
+        # at the cycle call site). None means "use ExtractorConfig() defaults".
+        self._extractor_config_dict = extractor_config or None
+        shuffle_meta: dict | None = None
+        if shuffle_personas:
+            from app.research.shuffle import derange_personas, is_derangement
+            assert shuffle_seed is not None  # enforced in run() wrapper
+            self._active_personas = derange_personas(PHILOSOPHICAL_PERSONAS, shuffle_seed)
+            assert is_derangement(PHILOSOPHICAL_PERSONAS, self._active_personas)
+            shuffle_meta = {
+                "enabled": True,
+                "seed": shuffle_seed,
+                "mapping": {p["id"]: p["_shuffled_from_id"] for p in self._active_personas},
+            }
 
         yield sse_event("auto_start", {
             "session_id": session_id,
@@ -256,6 +481,7 @@ class AutoLoopScheduler:
             "adversarial": adversarial,
             "extract_stances": extract_stances,
             "branching": branching,
+            "shuffle_personas": shuffle_meta,
         })
 
         current_hypothesis = seed_hypothesis
@@ -281,6 +507,9 @@ class AutoLoopScheduler:
                 "hypothesis": current_hypothesis,
             })
 
+            # Tag every record from now on with this cycle (Y1 efficiency reporting).
+            self.tracker.set_context(cycle=cycle_num, phase=f"cycle_{cycle_num}")
+
             # ── Dispatch to mode-specific runner ──
             if mode == "philosophical":
                 cycle_synthesis, cycle_converged, cycle_loop_id = "", False, ""
@@ -291,6 +520,10 @@ class AutoLoopScheduler:
                         adversarial=adversarial,
                         extract_stances=extract_stances,
                         flip_stance=flip_stance,
+                        subq_decomposition=subq_decomposition,
+                        self_reflection=self_reflection,
+                        subdomain_routing=subdomain_routing,
+                        judge_verdict=judge_verdict,
                     ):
                         # ev is a dict from sse_event(): {"type": ..., "data": ...}
                         ev_type = ev.get("type", "")
@@ -424,6 +657,7 @@ class AutoLoopScheduler:
         final_synthesis = ""
         if mode == "philosophical" and len(result.cycles) >= 2:
             yield sse_event("final_synth_start", {"session_id": session_id})
+            self.tracker.set_context(phase="final_meta_synthesis", cycle=None, persona=None)
             final_synthesis = await self._meta_synthesize_across_cycles(
                 seed_hypothesis, result.cycles,
             )
@@ -440,7 +674,7 @@ class AutoLoopScheduler:
             "stopped_reason": result.stopped_reason,
             "evolution_chain": result.evolution_chain,
             "final_synthesis": final_synthesis,
-            "token_usage": self.tracker.get_summary() if hasattr(self.tracker, 'get_summary') else {},
+            "token_usage": self.tracker.summary(),
         })
 
     async def _meta_synthesize_across_cycles(
@@ -498,6 +732,10 @@ class AutoLoopScheduler:
         adversarial: bool = False,
         extract_stances: bool = False,
         flip_stance: bool = False,
+        subq_decomposition: bool = False,
+        self_reflection: bool = False,
+        subdomain_routing: bool = False,
+        judge_verdict: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """One cycle of philosophical debate:
         5 personas each give their perspective → (optional adversarial) → synthesis.
@@ -511,25 +749,54 @@ class AutoLoopScheduler:
         phil_persona_complete, phil_debate_done, phil_synthesis_done,
         (optional) phil_stance_matrix.
         """
-        # Build context from previous rounds
+        # Build context from previous rounds (language-aware for bilingual sweep)
+        import os as _os_lang
+        _lang = _os_lang.environ.get("WHATIF_LANGUAGE", "zh").lower()
         history_context = ""
         if len(chain) > 1:
             prev = chain[:-1]
-            history_context = (
-                "此前的对话已经探讨了以下问题：\n"
-                + "\n".join(f"  {i+1}. {q}" for i, q in enumerate(prev))
-                + "\n\n请在此基础上深入，避免重复已有观点。\n\n"
-            )
+            if _lang == "en":
+                history_context = (
+                    "Earlier rounds of this conversation have explored:\n"
+                    + "\n".join(f"  {i+1}. {q}" for i, q in enumerate(prev))
+                    + "\n\nPlease build on this rather than repeat prior points.\n\n"
+                )
+            else:
+                history_context = (
+                    "此前的对话已经探讨了以下问题：\n"
+                    + "\n".join(f"  {i+1}. {q}" for i, q in enumerate(prev))
+                    + "\n\n请在此基础上深入，避免重复已有观点。\n\n"
+                )
+
+        # ── Method A: subquestion decomposition path ──
+        # Decompose → debate each subq → master-synthesize. Replaces the
+        # normal single-question cycle when subq_decomposition is on.
+        if subq_decomposition:
+            async for ev in self._run_cycle_with_subqs(
+                cycle_num, question, seed_question, history_context,
+                adversarial=adversarial,
+                self_reflection=self_reflection,
+                subdomain_routing=subdomain_routing,
+            ):
+                yield ev
+            return
 
         # Phase 1: First 4 personas respond (or all 5 if not adversarial)
         all_responses: list[dict] = []
-        personas_to_run = PHILOSOPHICAL_PERSONAS[:4] if adversarial else PHILOSOPHICAL_PERSONAS
+        # Honor Y5 negative-control shuffle if active for this run.
+        active = getattr(self, "_active_personas", None) or PHILOSOPHICAL_PERSONAS
+        personas_to_run = active[:4] if adversarial else active
 
         for idx, persona in enumerate(personas_to_run):
             # Smart pairing: pick provider best-suited for this persona's
             # tradition. Falls back to round-robin if pool doesn't have it.
             backend = _smart_persona_backend(self.tracker, persona["id"], idx)
             model_name = backend.backend_name()
+            # Tag tracker so this persona's calls are attributed correctly.
+            self.tracker.set_context(
+                phase=f"cycle_{cycle_num}_debate",
+                persona=persona["id"],
+            )
 
             yield sse_event("phil_persona_start", {
                 "cycle": cycle_num,
@@ -553,18 +820,33 @@ class AutoLoopScheduler:
                     "目的不是戏谑反对，而是**找出反方立场里真正合理的部分**，"
                     "证明你能跳出自身传统的认知边界。这是检验思想韧性的方式。\n"
                 )
-            user_prompt = (
-                f"{history_context}"
-                f"当前问题：{question}\n\n"
-                f"请从你的哲学立场出发，对这个问题给出你的分析和立场。"
-                f"如果你与其他思想流派存在根本分歧，请明确指出分歧所在。"
-                f"{flip_directive}"
-            )
+            if _lang == "en":
+                user_prompt = (
+                    f"{history_context}"
+                    f"Question: {question}\n\n"
+                    f"From the philosophical stance of your tradition, give your analysis and position on this question. "
+                    f"If you have fundamental disagreement with other traditions, name the point of disagreement explicitly. "
+                    f"Respond in English throughout, regardless of the language used in the question."
+                    f"{flip_directive}"
+                    f"{FALSIFIABILITY_DIRECTIVE_EN}"
+                )
+            else:
+                user_prompt = (
+                    f"{history_context}"
+                    f"当前问题：{question}\n\n"
+                    f"请从你的哲学立场出发，对这个问题给出你的分析和立场。"
+                    f"如果你与其他思想流派存在根本分歧，请明确指出分歧所在。"
+                    f"{flip_directive}"
+                    f"{FALSIFIABILITY_DIRECTIVE_ZH}"
+                )
 
             full_response: list[str] = []
+            # Honor user override of this persona's system prompt, if any.
+            overrides = getattr(self, "_persona_overrides", {}) or {}
+            effective_prompt = overrides.get(persona["id"]) or persona["system_prompt"]
             try:
                 async for chunk in backend.stream(
-                    system_prompt=persona["system_prompt"],
+                    system_prompt=cached_system(effective_prompt),
                     messages=[{"role": "user", "content": user_prompt}],
                     max_tokens=900,  # bumped from 600 — DeepSeek / GLM often hit ceiling
                 ):
@@ -600,6 +882,35 @@ class AutoLoopScheduler:
                 "content": content,
             })
 
+            # ── Method B: Self-Reflection ──
+            # Same model is asked to identify ONE assumption it made + ONE
+            # alternative view its tradition would dismiss. Lightweight self-critique.
+            if self_reflection and content and not content.startswith("[模型"):
+                try:
+                    refl_system = (
+                        "你刚刚以一个哲学立场回答了一个问题。现在站在批判自己的角度，"
+                        "用 ≤80 字识别两件事：\n"
+                        "  1. 你刚才**隐含的一个未被证明的假设**（具体到一句）\n"
+                        "  2. 你的传统通常会**忽视或贬低**但此处可能成立的一种反方观点\n"
+                        "禁用空话，直接给两个 bullet。"
+                    )
+                    refl_user = f"原命题：{question}\n\n你刚才的回答：\n{content[:500]}"
+                    refl_text = await backend.complete(
+                        system_prompt=refl_system,
+                        messages=[{"role": "user", "content": refl_user}],
+                        max_tokens=300,
+                        temperature=0.4,
+                    )
+                    yield sse_event("phil_self_reflection", {
+                        "cycle": cycle_num,
+                        "persona_id": persona["id"],
+                        "persona_name": persona["name"],
+                        "model": model_name,
+                        "reflection": (refl_text or "").strip(),
+                    })
+                except Exception as e:
+                    logger.warning(f"self-reflection failed for {persona['id']}: {e}")
+
         # Phase 2: Adversarial pass — devil's advocate reads all responses and attacks
         if adversarial:
             adversary = PHILOSOPHICAL_PERSONAS[4]  # critical_theorist
@@ -627,8 +938,10 @@ class AutoLoopScheduler:
 
             full_response: list[str] = []
             try:
+                overrides_adv = getattr(self, "_persona_overrides", {}) or {}
+                effective_adv_prompt = overrides_adv.get("adversary") or ADVERSARIAL_SYSTEM_PROMPT
                 async for chunk in backend.stream(
-                    system_prompt=ADVERSARIAL_SYSTEM_PROMPT,
+                    system_prompt=cached_system(effective_adv_prompt),
                     messages=[{"role": "user", "content": adversarial_user}],
                     max_tokens=1500,  # adversary attacks all 4 personas — needs room
                 ):
@@ -671,6 +984,7 @@ class AutoLoopScheduler:
         })
 
         # Synthesize all perspectives
+        self.tracker.set_context(phase=f"cycle_{cycle_num}_synthesis", persona=None)
         judge_backend = get_strong_backend(self.tracker)
         synthesis = await self._synthesize_philosophical(
             question, seed_question, all_responses, chain,
@@ -683,15 +997,340 @@ class AutoLoopScheduler:
             "model": judge_backend.backend_name(),
         })
 
-        # Feature 1: Extract stance matrix (epistemic divergence map)
+        # Judge verdict — explicit ruling on contested points (opt-in via flag).
+        if judge_verdict:
+            self.tracker.set_context(phase=f"cycle_{cycle_num}_judge_verdict")
+            verdict_backend = get_strong_backend(self.tracker)
+            try:
+                verdict = await self._judge_verdict(
+                    question, all_responses, synthesis, verdict_backend,
+                )
+                if verdict:
+                    yield sse_event("phil_judge_verdict", {
+                        "cycle": cycle_num,
+                        "verdict": verdict,
+                        "model": verdict_backend.backend_name(),
+                    })
+            except Exception as e:
+                logger.error(f"judge_verdict failed for cycle {cycle_num}: {e}")
+
+        # Feature 1: Extract stance matrix (epistemic divergence map).
+        # Delegated to app.research.stance_extractor (R2 decoupling); Y4
+        # ablation switches honored via the per-run extractor config.
         if extract_stances:
-            stance_matrix = await self._extract_stance_matrix(
-                question, all_responses,
+            from app.research.stance_extractor import (
+                extract_stance_legacy, ExtractorConfig,
             )
-            yield sse_event("phil_stance_matrix", {
-                "cycle": cycle_num,
-                "matrix": stance_matrix,
+            self.tracker.set_context(phase=f"cycle_{cycle_num}_stance_extraction")
+            extractor_backend = get_strong_backend(self.tracker)
+            extractor_dict = getattr(self, "_extractor_config_dict", None)
+            extractor_cfg = ExtractorConfig(**extractor_dict) if extractor_dict else None
+
+            # Y4 S5 cycle_2_only: when configured, skip extraction for
+            # cycles other than cycle 2. The matrix is emitted once at
+            # cycle 2 over only that cycle's responses.
+            skip_for_filter = (
+                extractor_dict is not None
+                and extractor_dict.get("cycle_filter") == "cycle_2_only"
+                and cycle_num != 2
+            )
+            if not skip_for_filter:
+                stance_matrix = await extract_stance_legacy(
+                    all_responses, extractor_backend,
+                    question=question, config=extractor_cfg,
+                )
+                yield sse_event("phil_stance_matrix", {
+                    "cycle": cycle_num,
+                    "matrix": stance_matrix,
+                })
+
+    # ─── Method A: Subquestion decomposition path ──────────────────
+
+    # Domain → preferred provider. Used by Method C (subdomain_routing).
+    SUBDOMAIN_TO_PROVIDER = {
+        "economics":    "openai",
+        "geopolitics":  "glm",
+        "ethics":       "deepseek",
+        "metaphysics":  "deepseek",
+        "psychology":   "claude",
+        "technology":   "openai",
+        "history":      "deepseek",
+        "sociology":    "glm",
+        "general":      None,  # fall back to smart pairing
+    }
+
+    async def _decompose_question(self, question: str) -> list[dict]:
+        """Lead model breaks the question into 2-4 orthogonal sub-questions.
+        Returns [{title, question, domain}, ...] — domain used for Method C routing."""
+        import json as _json, re as _re
+        from app.core.inference import get_judge_backend
+        backend = get_judge_backend(self.tracker)
+        system = (
+            "你是一位议题分解专家。把一个哲学问题拆成 2-4 个**正交的**子问题，"
+            "确保每个子问题独立、可单独回答，且合起来覆盖原问题的关键维度。\n\n"
+            "每个子问题标注一个 domain（economics / geopolitics / ethics / "
+            "metaphysics / psychology / technology / history / sociology / general）—— "
+            "这会用于路由到最匹配的 provider。\n\n"
+            "严格输出 JSON：{sub_questions: [{title: ≤20字, question: 完整问句, "
+            "domain: 上述枚举之一}, ...]}\n"
+            "禁用空话，仅输出 JSON。"
+        )
+        try:
+            raw = await backend.complete(
+                system_prompt=system,
+                messages=[{"role": "user", "content": f"原问题：{question}"}],
+                max_tokens=700, temperature=0.3,
+            )
+        except Exception as e:
+            logger.error(f"subq decompose backend error: {e}")
+            return [{"title": question[:20], "question": question, "domain": "general"}]
+        raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+        raw = _re.sub(r"```\s*$", "", raw)
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if not m:
+            return [{"title": question[:20], "question": question, "domain": "general"}]
+        try:
+            parsed = _json.loads(m.group(0))
+        except _json.JSONDecodeError:
+            return [{"title": question[:20], "question": question, "domain": "general"}]
+        valid_domains = set(self.SUBDOMAIN_TO_PROVIDER.keys())
+        out = []
+        for sq in (parsed.get("sub_questions") or [])[:4]:
+            if not isinstance(sq, dict):
+                continue
+            domain = str(sq.get("domain", "general"))
+            if domain not in valid_domains:
+                domain = "general"
+            out.append({
+                "title": str(sq.get("title", ""))[:50],
+                "question": str(sq.get("question", ""))[:300],
+                "domain": domain,
             })
+        if not out:
+            out = [{"title": question[:20], "question": question, "domain": "general"}]
+        return out
+
+    def _backend_for_subq(self, persona: dict, persona_idx: int, subq_domain: str, subdomain_routing: bool):
+        """Method C: when subdomain_routing is on, override smart pairing
+        based on the sub-question's domain. Otherwise fall back to smart pairing."""
+        from app.core.inference import get_backend_from_spec
+        if subdomain_routing:
+            preferred = self.SUBDOMAIN_TO_PROVIDER.get(subq_domain)
+            if preferred:
+                pool_str = getattr(get_settings(), "persona_pool", "")
+                for spec in (pool_str or "").split(","):
+                    spec = spec.strip()
+                    if spec.startswith(f"{preferred}:"):
+                        return get_backend_from_spec(spec, self.tracker, tier="persona")
+        return _smart_persona_backend(self.tracker, persona["id"], persona_idx)
+
+    async def _master_synth_subqs(
+        self, original_question: str,
+        subq_results: list[dict],
+    ) -> str:
+        """Take all sub-question syntheses and produce a master answer to the
+        original question. Uses judge tier."""
+        from app.core.inference import get_judge_backend
+        backend = get_judge_backend(self.tracker)
+        body = "\n\n".join(
+            f"### 子问题 {i+1}（{r['subq']['domain']}）：{r['subq']['title']}\n"
+            f"**问**：{r['subq']['question']}\n"
+            f"**子综合**：{r['synthesis'][:500]}"
+            for i, r in enumerate(subq_results)
+        )
+        system = (
+            "你是一位跨学科调停者。任务：把若干子问题的辩论综合**汇回**原问题。\n"
+            "要求 ≤500 字 分三段：\n"
+            "1) 各子问题给出的最重要洞见（每个一句）\n"
+            "2) 子问题之间相互**支持**或**冲突**的地方\n"
+            "3) 对原问题的统一回答 —— 不是简单拼接，而是显式说明"
+            "哪些子问题构成主要论据、哪些是次要修正\n"
+            "禁用空话。"
+        )
+        user = f"原问题：{original_question}\n\n各子问题辩论结果：\n{body}"
+        try:
+            return await backend.complete(
+                system_prompt=system,
+                messages=[{"role": "user", "content": user}],
+                max_tokens=1200,
+                temperature=0.4,
+            )
+        except Exception as e:
+            logger.error(f"master subq synth failed: {e}")
+            return f"[汇总失败：{e}]"
+
+    async def _run_cycle_with_subqs(
+        self, cycle_num: int, question: str, seed_question: str,
+        history_context: str,
+        adversarial: bool = False,
+        self_reflection: bool = False,
+        subdomain_routing: bool = False,
+    ) -> AsyncGenerator[dict, None]:
+        """Subquestion-decomposed cycle: lead model splits → mini-debate per
+        sub-question (single round, 5 personas) → master synthesizer."""
+
+        # Step 1: decompose
+        yield sse_event("phil_subq_decompose_start", {"cycle": cycle_num})
+        subqs = await self._decompose_question(question)
+        yield sse_event("phil_subqs_proposed", {
+            "cycle": cycle_num,
+            "sub_questions": subqs,
+            "subdomain_routing": subdomain_routing,
+        })
+
+        active = getattr(self, "_active_personas", None) or PHILOSOPHICAL_PERSONAS
+        personas_to_run = active[:4] if adversarial else active
+
+        # Step 2: mini-debate per sub-question
+        subq_results = []
+        for sq_idx, sq in enumerate(subqs):
+            yield sse_event("phil_subq_start", {
+                "cycle": cycle_num, "subq_idx": sq_idx,
+                "title": sq["title"], "question": sq["question"], "domain": sq["domain"],
+            })
+
+            sq_responses = []
+            for p_idx, persona in enumerate(personas_to_run):
+                backend = self._backend_for_subq(persona, p_idx, sq["domain"], subdomain_routing)
+                model_name = backend.backend_name()
+
+                yield sse_event("phil_subq_persona_start", {
+                    "cycle": cycle_num, "subq_idx": sq_idx,
+                    "persona_id": persona["id"], "persona_name": persona["name"],
+                    "model": model_name, "domain": sq["domain"],
+                })
+
+                user_prompt = (
+                    f"{history_context}"
+                    f"原命题（上下文）：{question}\n"
+                    f"当前**子问题** ({sq['domain']}): {sq['question']}\n\n"
+                    f"请只针对这个子问题给出你的立场（≤200 字）。无需重述原命题。"
+                    f"{FALSIFIABILITY_DIRECTIVE_ZH}"
+                )
+                chunks: list[str] = []
+                try:
+                    overrides_sq = getattr(self, "_persona_overrides", {}) or {}
+                    effective_sq_prompt = overrides_sq.get(persona["id"]) or persona["system_prompt"]
+                    async for c in backend.stream(
+                        system_prompt=cached_system(effective_sq_prompt),
+                        messages=[{"role": "user", "content": user_prompt}],
+                        max_tokens=400,
+                    ):
+                        chunks.append(c)
+                        yield sse_event("phil_subq_persona_chunk", {
+                            "cycle": cycle_num, "subq_idx": sq_idx,
+                            "persona_id": persona["id"], "text": c,
+                        })
+                except Exception as e:
+                    logger.error(f"subq {sq_idx} persona {persona['id']} ({model_name}) failed: {e}")
+                    chunks = [f"[模型 {model_name} 调用失败：{type(e).__name__}]"]
+
+                content = "".join(chunks)
+                sq_responses.append({
+                    "persona_id": persona["id"],
+                    "persona_name": persona["name"],
+                    "model": model_name,
+                    "content": content,
+                })
+                yield sse_event("phil_subq_persona_complete", {
+                    "cycle": cycle_num, "subq_idx": sq_idx,
+                    "persona_id": persona["id"], "persona_name": persona["name"],
+                    "model": model_name, "content": content,
+                })
+
+                # Method B chains in here too
+                if self_reflection and content and not content.startswith("[模型"):
+                    try:
+                        refl_system = (
+                            "你刚刚以一个哲学立场回答了一个子问题。用 ≤80 字识别：\n"
+                            "  1. 你刚才的**一个隐含假设**\n"
+                            "  2. 你的传统通常会忽视的**一种反方观点**\n"
+                            "禁用空话，直接给两个 bullet。"
+                        )
+                        refl_text = await backend.complete(
+                            system_prompt=refl_system,
+                            messages=[{"role": "user", "content": f"子问题：{sq['question']}\n\n你的回答：\n{content[:400]}"}],
+                            max_tokens=300, temperature=0.4,
+                        )
+                        yield sse_event("phil_subq_self_reflection", {
+                            "cycle": cycle_num, "subq_idx": sq_idx,
+                            "persona_id": persona["id"],
+                            "reflection": (refl_text or "").strip(),
+                        })
+                    except Exception as e:
+                        logger.warning(f"subq self-reflection failed: {e}")
+
+            # Synthesize this sub-question
+            sub_synth = await self._synthesize_philosophical(
+                sq["question"], seed_question, sq_responses, chain=[seed_question],
+                backend=None,
+            )
+            subq_results.append({"subq": sq, "synthesis": sub_synth, "responses": sq_responses})
+            yield sse_event("phil_subq_synth_done", {
+                "cycle": cycle_num, "subq_idx": sq_idx,
+                "synthesis": sub_synth,
+            })
+
+        # Step 3: master synthesis back to original question
+        yield sse_event("phil_subq_master_start", {"cycle": cycle_num})
+        master = await self._master_synth_subqs(question, subq_results)
+        # Emit as the cycle's main synthesis so next-hypothesis extraction picks it up
+        yield sse_event("phil_synthesis_done", {
+            "cycle": cycle_num,
+            "synthesis": master,
+            "model": "judge-master-synth",
+            "is_subq_master": True,
+            "sub_question_count": len(subqs),
+        })
+
+    async def _judge_verdict(
+        self,
+        question: str,
+        responses: list[dict],
+        synthesis: str,
+        backend,
+    ) -> dict | None:
+        """Render explicit verdicts on the contested points in this debate.
+
+        Returns the parsed verdict dict, or None on parse failure.
+        Caller decides whether to emit it as an SSE event.
+        """
+        import json as _json
+        import re as _re
+        persona_texts = "\n\n".join(
+            f"【{r.get('persona_name','?')} ({r.get('persona_id','?')})】\n{r.get('content','')}"
+            for r in responses
+        )
+        user = (
+            f"问题: {question}\n\n"
+            f"各思想家立场:\n{persona_texts}\n\n"
+            f"综合摘要（参考）:\n{synthesis}\n\n"
+            f"请按 schema 输出 JSON 裁决。"
+        )
+        try:
+            raw = await backend.complete(
+                system_prompt=JUDGE_VERDICT_SYSTEM,
+                messages=[{"role": "user", "content": user}],
+                max_tokens=1500,
+                temperature=0.3,
+            )
+        except Exception as e:
+            logger.error(f"_judge_verdict backend error: {e}")
+            return None
+        # Strip code fences, take first {...} block
+        raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+        raw = _re.sub(r"```\s*$", "", raw)
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if not m:
+            return None
+        try:
+            parsed = _json.loads(m.group(0))
+        except _json.JSONDecodeError as e:
+            logger.warning(f"_judge_verdict JSON parse failed: {e}")
+            return None
+        if not isinstance(parsed, dict) or "verdicts" not in parsed:
+            return None
+        return parsed
 
     async def _synthesize_philosophical(
         self,
@@ -702,24 +1341,45 @@ class AutoLoopScheduler:
         backend=None,
     ) -> str:
         """Synthesize 5 philosophical perspectives into a coherent analysis."""
-        system = (
-            "你是一位跨学科哲学调停者。你的任务是从五个不同哲学传统的回应中：\n"
-            "1. 找到各立场之间的真正共识（不是表面和稀泥）\n"
-            "2. 明确不可调和的核心分歧\n"
-            "3. 揭示各立场的隐含前提和盲区\n"
-            "4. 指出对话中出现的最深刻洞察\n\n"
-            "用中文输出，400 字以内。语言须精确，避免笼统的总结。"
-        )
+        import os as _os_lang
+        _lang = _os_lang.environ.get("WHATIF_LANGUAGE", "zh").lower()
+        if _lang == "en":
+            system = (
+                "You are an interdisciplinary philosophical mediator. From the five "
+                "philosophical-tradition responses below, your task is to:\n"
+                "1. Identify the genuine consensus across positions (not surface-level smoothing).\n"
+                "2. Name the irreducible core disagreements.\n"
+                "3. Surface each position's hidden premises and blind spots.\n"
+                "4. Highlight the deepest insights that emerged in the dialogue.\n\n"
+                "Respond in English, ~400 words. Be precise; avoid vague summaries."
+            )
+            persona_texts = "\n\n".join(
+                f"[{r['persona_name']}]\n{r['content']}" for r in responses
+            )
+            user = (
+                f"Original question: {seed_question}\n"
+                f"Current focus: {question}\n\n"
+                f"Five philosophical responses:\n{persona_texts}"
+            )
+        else:
+            system = (
+                "你是一位跨学科哲学调停者。你的任务是从五个不同哲学传统的回应中：\n"
+                "1. 找到各立场之间的真正共识（不是表面和稀泥）\n"
+                "2. 明确不可调和的核心分歧\n"
+                "3. 揭示各立场的隐含前提和盲区\n"
+                "4. 指出对话中出现的最深刻洞察\n\n"
+                "用中文输出，400 字以内。语言须精确，避免笼统的总结。"
+            )
 
-        persona_texts = "\n\n".join(
-            f"【{r['persona_name']}】\n{r['content']}" for r in responses
-        )
+            persona_texts = "\n\n".join(
+                f"【{r['persona_name']}】\n{r['content']}" for r in responses
+            )
 
-        user = (
-            f"原始问题: {seed_question}\n"
-            f"当前聚焦: {question}\n\n"
-            f"五位哲学家的回应:\n{persona_texts}"
-        )
+            user = (
+                f"原始问题: {seed_question}\n"
+                f"当前聚焦: {question}\n\n"
+                f"五位哲学家的回应:\n{persona_texts}"
+            )
 
         try:
             if backend is None:
@@ -731,52 +1391,11 @@ class AutoLoopScheduler:
             logger.error(f"Philosophical synthesis failed: {e}")
             return f"[综合失败: {e}]"
 
-    async def _extract_stance_matrix(
-        self,
-        question: str,
-        responses: list[dict],
-    ) -> dict:
-        """Extract a persona × argument stance matrix from debate responses.
-
-        Returns: {
-            "arguments": ["arg1", "arg2", ...],   # 4-6 key arguments/positions
-            "stances": {
-                "persona_id": [score1, score2, ...],  # -1.0 to 1.0
-                ...
-            }
-        }
-        """
-        import json as json_mod
-
-        system = (
-            "你是辩论分析师。从多位哲学家对同一问题的回应中：\n"
-            "1. 提取 4-6 个核心论点/立场（简短标签，10 字以内）\n"
-            "2. 为每位思想家在每个论点上打分：-1.0（强烈反对）到 1.0（强烈支持），0 表示未表态\n\n"
-            "严格输出 JSON：\n"
-            '{"arguments": ["论点1", "论点2", ...], '
-            '"stances": {"persona_id": [score1, score2, ...], ...}}\n\n'
-            "不要输出任何 JSON 以外的内容。"
-        )
-
-        persona_texts = "\n\n".join(
-            f"[{r['persona_id']}] {r['persona_name']}:\n{r['content']}" for r in responses
-        )
-        user = f"问题: {question}\n\n各方回应:\n{persona_texts}"
-
-        try:
-            backend = get_strong_backend(self.tracker)
-            raw = await backend.complete(
-                system, [{"role": "user", "content": user}],
-                max_tokens=800, temperature=0.2,
-            )
-            # Parse JSON from response
-            raw = raw.strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            return json_mod.loads(raw)
-        except Exception as e:
-            logger.error(f"Stance matrix extraction failed: {e}")
-            return {"arguments": [], "stances": {}}
+    # _extract_stance_matrix has been removed in favor of
+    # app.research.stance_extractor.extract_stance() — see R2 spec.
+    # Callers that produced the legacy `phil_stance_matrix` event payload
+    # should call extract_stance_legacy(responses, backend, question=...)
+    # which returns the same {"arguments": [...], "stances": {...}} shape.
 
     async def _extract_candidate_questions(
         self,
@@ -836,24 +1455,45 @@ class AutoLoopScheduler:
         chain: list[str],
     ) -> str:
         """Extract the next philosophical sub-question from synthesis."""
-        system = (
-            "你是哲学对话的引导者。基于当前轮次的综合分析，提取一个值得下一轮深入探讨的子问题。\n"
-            "要求：\n"
-            "1. 新问题必须与之前的问题不同（不要重复，检查已探讨列表）\n"
-            "2. 应聚焦于综合分析中揭示的最深层分歧或最有启发性的盲区\n"
-            "3. 问题应更具体、更尖锐，推动对话走向更深处而非更广处\n"
-            "4. 如果对话已经充分展开所有核心分歧，返回空字符串\n\n"
-            "只输出问题本身，不要任何前缀或解释。"
-        )
-
-        chain_text = "\n".join(f"  第{i+1}轮: {h}" for i, h in enumerate(chain))
-        user = (
-            f"原始问题: {seed}\n"
-            f"当前问题: {current}\n"
-            f"已探讨问题链:\n{chain_text}\n\n"
-            f"当前轮综合分析:\n{synthesis[:1000]}\n\n"
-            f"请提取下一个值得深入的子问题："
-        )
+        import os as _os_lang
+        _lang = _os_lang.environ.get("WHATIF_LANGUAGE", "zh").lower()
+        if _lang == "en":
+            system = (
+                "You are a philosophical-dialog moderator. Based on the synthesis of the current "
+                "round, extract a sub-question worth exploring in the next round.\n"
+                "Requirements:\n"
+                "1. The new question must differ from prior ones (check the explored list).\n"
+                "2. Focus on the deepest disagreement or most informative blind spot revealed.\n"
+                "3. Make it sharper and more specific, pushing depth rather than breadth.\n"
+                "4. If the conversation has fully explored core disagreements, return an empty string.\n\n"
+                "Output only the question itself, with no prefix or explanation. Respond in English."
+            )
+            chain_text = "\n".join(f"  Round {i+1}: {h}" for i, h in enumerate(chain))
+            user = (
+                f"Original question: {seed}\n"
+                f"Current question: {current}\n"
+                f"Question chain so far:\n{chain_text}\n\n"
+                f"Synthesis of the current round:\n{synthesis[:1000]}\n\n"
+                f"Extract the next sub-question:"
+            )
+        else:
+            system = (
+                "你是哲学对话的引导者。基于当前轮次的综合分析，提取一个值得下一轮深入探讨的子问题。\n"
+                "要求：\n"
+                "1. 新问题必须与之前的问题不同（不要重复，检查已探讨列表）\n"
+                "2. 应聚焦于综合分析中揭示的最深层分歧或最有启发性的盲区\n"
+                "3. 问题应更具体、更尖锐，推动对话走向更深处而非更广处\n"
+                "4. 如果对话已经充分展开所有核心分歧，返回空字符串\n\n"
+                "只输出问题本身，不要任何前缀或解释。"
+            )
+            chain_text = "\n".join(f"  第{i+1}轮: {h}" for i, h in enumerate(chain))
+            user = (
+                f"原始问题: {seed}\n"
+                f"当前问题: {current}\n"
+                f"已探讨问题链:\n{chain_text}\n\n"
+                f"当前轮综合分析:\n{synthesis[:1000]}\n\n"
+                f"请提取下一个值得深入的子问题："
+            )
 
         try:
             backend = get_strong_backend(self.tracker)

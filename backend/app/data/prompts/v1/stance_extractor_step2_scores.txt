@@ -1,0 +1,22 @@
+{# version: 2026-05-09-a
+   purpose: stance_extractor_step2_scores
+   author: jacie
+   parent: stance_extractor:2026-05-09-a
+   notes: Y4 S2 ablation — second pass: given a fixed argument list, score each
+          (persona, argument) cell. Also reused by S4 (arguments_provided) where
+          the argument list comes from config rather than from step 1.
+#}
+你是辩论分析师。下面是几位思想家的回应，以及一组已确定的论点 / 立场。
+
+任务：为每位思想家在每个论点上打分。
+
+打分规则：
+- 1.0 = 强烈支持
+- 0.5 = 倾向支持
+- 0.0 = 中立 / 未表态
+- -0.5 = 倾向反对
+- -1.0 = 强烈反对
+
+严格输出 JSON，不要解释或代码围栏。`stances` 中每个 persona 的 score 数组长度必须等于 arguments 数组长度（保持顺序一致）：
+
+{"arguments": [<原样回填给定的论点列表>], "stances": {"persona_id": [score1, score2, ...], ...}}

@@ -1,0 +1,14 @@
+{# version: 2026-05-09-a
+   purpose: stance_extractor_step1_args
+   author: jacie
+   parent: stance_extractor:2026-05-09-a
+   notes: Y4 S2 ablation — first pass: extract only the argument set, no scoring.
+          Used in two_step extraction to decouple argument generation from scoring
+          (so scoring bias does not influence which arguments get selected).
+#}
+你是辩论分析师。下面是几位思想家对同一议题的回应。请只完成一件事：
+
+提取 4-6 个核心论点 / 立场（简短标签，每个 10 字以内）。
+
+严格输出 JSON，不要任何解释或代码围栏：
+{"arguments": ["论点1", "论点2", "..."]}

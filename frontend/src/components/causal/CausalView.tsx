@@ -3,8 +3,9 @@
  * Handles scenario input → graph generation → interactive exploration.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCausalStore } from '../../store/causalStore';
+import { usePortalStore } from '../../store/portalStore';
 import { CausalGraphView } from './CausalGraph';
 import { CausalPanel } from './CausalPanel';
 
@@ -31,6 +32,19 @@ export function CausalView() {
   const [title, setTitle] = useState('');
   const [hypothesis, setHypothesis] = useState('');
   const [domain, setDomain] = useState('general');
+  const [portalSource, setPortalSource] = useState<string | null>(null);
+
+  // Consume portal payload from other modules.
+  const portalPending = usePortalStore((s) => s.pending);
+  const consumePortal = usePortalStore((s) => s.consume);
+  useEffect(() => {
+    if (!portalPending || portalPending.target !== 'causal') return;
+    const payload = consumePortal('causal');
+    if (!payload) return;
+    setHypothesis(payload.text);
+    setTitle(payload.text.slice(0, 20));
+    setPortalSource(payload.sourceLabel);
+  }, [portalPending, consumePortal]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,12 +129,19 @@ export function CausalView() {
           </div>
 
           <div>
-            <label className="block text-[15px] font-mono text-deep-200/75 mb-2 uppercase tracking-[0.2em]">
-              假设描述 <span className="text-amber-300/90">*</span>
-            </label>
+            <div className="flex items-baseline justify-between mb-2">
+              <label className="block text-[15px] font-mono text-deep-200/75 uppercase tracking-[0.2em]">
+                假设描述 <span className="text-amber-300/90">*</span>
+              </label>
+              {portalSource && (
+                <span className="text-[10px] font-mono text-amber-300/85 uppercase tracking-wider px-2 py-0.5 rounded bg-amber-300/[0.06] border border-amber-300/30">
+                  ⇆ 已从「{portalSource}」注入
+                </span>
+              )}
+            </div>
             <textarea
               value={hypothesis}
-              onChange={e => setHypothesis(e.target.value)}
+              onChange={e => { setHypothesis(e.target.value); setPortalSource(null); }}
               placeholder="如果……会怎样？"
               rows={3}
               className="w-full bg-deep-700/30 border border-deep-400/40 rounded-lg px-4 py-3 text-sm text-white placeholder-deep-300/55 resize-none transition-all"

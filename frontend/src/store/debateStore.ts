@@ -3,7 +3,9 @@
  */
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { debateApi, type DebateStartResponse, type TokenUsage } from '../services/api';
+import { clearStreamingFlags } from './persistHelpers';
 
 export interface PersonaEval {
   persona_id: string;
@@ -92,7 +94,9 @@ const initialState = {
   personaModels: {} as Record<string, string>,
 };
 
-export const useDebateStore = create<DebateStore>((set, get) => ({
+export const useDebateStore = create<DebateStore>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   startDebate: async (params) => {
@@ -260,4 +264,39 @@ export const useDebateStore = create<DebateStore>((set, get) => ({
   setError: (error) => set({ error, status: error ? 'error' : 'active' }),
 
   reset: () => set(initialState),
-}));
+    }),
+    {
+      name: 'whatif-debate-store',
+      version: 1,
+      // Persist only stable session data — drop streaming buffers + errors.
+      partialize: (s) => ({
+        sessionId: s.sessionId,
+        scenario: s.scenario,
+        personas: s.personas,
+        rounds: s.rounds,
+        currentRound: s.currentRound,
+        tokenUsage: s.tokenUsage,
+        summary: s.summary,
+        judgeModel: s.judgeModel,
+        personaModels: s.personaModels,
+      }),
+      // After rehydrate: any partially-streamed statement is now frozen.
+      merge: (persistedRaw, current) => {
+        const persisted = (persistedRaw as Partial<DebateStore>) ?? {};
+        const cleanedRounds = (persisted.rounds ?? []).map(r => ({
+          ...r,
+          statements: clearStreamingFlags(r.statements),
+        }));
+        return {
+          ...current,
+          ...persisted,
+          rounds: cleanedRounds,
+          status: persisted.sessionId ? 'active' : 'idle',
+          error: null,
+          streamingPersonaId: null,
+          streamingText: '',
+        };
+      },
+    },
+  ),
+);

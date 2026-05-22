@@ -3,6 +3,7 @@
  */
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import {
   causalApi,
   type CausalNode,
@@ -51,7 +52,9 @@ const INITIAL_STATE = {
   streamingText: '',
 };
 
-export const useCausalStore = create<CausalState>((set, get) => ({
+export const useCausalStore = create<CausalState>()(
+  persist(
+    (set, get) => ({
   ...INITIAL_STATE,
 
   generateGraph: async (title: string, hypothesis: string, domain: string) => {
@@ -167,4 +170,38 @@ export const useCausalStore = create<CausalState>((set, get) => ({
   setError: (error: string | null) => set({ error }),
 
   reset: () => set(INITIAL_STATE),
-}));
+    }),
+    {
+      name: 'whatif-causal-store',
+      version: 1,
+      partialize: (s) => ({
+        graphId: s.graphId,
+        title: s.title,
+        nodes: s.nodes,
+        edges: s.edges,
+        selectedNodeId: s.selectedNodeId,
+        propagationAnalysis: s.propagationAnalysis,
+        tokenUsage: s.tokenUsage,
+      }),
+      merge: (persistedRaw, current) => {
+        const persisted = (persistedRaw as Partial<CausalState>) ?? {};
+        // Rebuild affectedNodeIds Set from propagationAnalysis if present.
+        const affected = new Set<string>();
+        if (persisted.propagationAnalysis?.steps) {
+          if (persisted.selectedNodeId) affected.add(persisted.selectedNodeId);
+          for (const step of persisted.propagationAnalysis.steps) {
+            affected.add(step.node_id);
+          }
+        }
+        return {
+          ...current,
+          ...persisted,
+          affectedNodeIds: affected,
+          status: 'idle',
+          error: null,
+          streamingText: '',
+        };
+      },
+    },
+  ),
+);

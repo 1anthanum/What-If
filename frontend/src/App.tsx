@@ -8,11 +8,15 @@ import { VotingHall } from './components/voting/VotingHall';
 import { CostBadge } from './components/common/CostBadge';
 import { CumulativeCostBadge } from './components/common/CumulativeCostBadge';
 import { SettingsPanel } from './components/common/SettingsPanel';
+import { OnboardingModal } from './components/common/OnboardingModal';
+import { DisclaimerBanner, DisclaimerFooter } from './components/common/DisclaimerNotice';
 import { Button } from './components/common/ui';
 import { useDebateStore } from './store/debateStore';
 import { useCausalStore } from './store/causalStore';
 import { useCounterfactualStore } from './store/counterfactualStore';
 import { useOrchestratorStore } from './store/orchestratorStore';
+import { useOnboardingStore } from './store/onboardingStore';
+import { useNavStore } from './store/navStore';
 
 const MODULES = [
   { key: 'debate', label: 'AI 辩论室', ready: true },
@@ -27,7 +31,9 @@ export default function App() {
   const causalStore = useCausalStore();
   const counterfactualStore = useCounterfactualStore();
   const orchestratorStore = useOrchestratorStore();
-  const [activeModule, setActiveModule] = useState<string>('debate');
+  const { activeModule, setActiveModule } = useNavStore();
+  const { seen: onboardingSeen, reopen: reopenOnboarding } = useOnboardingStore();
+  const [onboardingOpen, setOnboardingOpen] = useState(!onboardingSeen);
 
   // Determine which module's token usage to show
   const tokenUsage =
@@ -55,9 +61,21 @@ export default function App() {
 
   return (
     <div className="min-h-screen relative">
+      {onboardingOpen && (
+        <OnboardingModal
+          onClose={() => setOnboardingOpen(false)}
+          onChoose={(m) => {
+            setActiveModule(m as any);
+            setOnboardingOpen(false);
+          }}
+        />
+      )}
       {/* Ambient warmth */}
       <div className="fixed top-0 left-1/4 w-[600px] h-[400px] bg-amber-300/[0.02] rounded-full blur-[120px] pointer-events-none" />
       <div className="fixed bottom-0 right-0 w-96 h-96 bg-amber-800/[0.03] rounded-full blur-[100px] pointer-events-none" />
+
+      {/* Dismissible first-load disclaimer banner */}
+      <DisclaimerBanner />
 
       {/* Header */}
       <header className="relative z-10 glass border-b border-amber-300/[0.10]">
@@ -78,6 +96,13 @@ export default function App() {
           </div>
           <div className="flex items-center gap-3">
             <CumulativeCostBadge activeModule={activeModule} />
+            <button
+              onClick={() => { reopenOnboarding(); setOnboardingOpen(true); }}
+              className="text-[11px] font-mono uppercase tracking-[0.18em] text-deep-200/65 hover:text-amber-300 px-2.5 py-1.5 rounded border border-deep-400/20 hover:border-amber-300/35 transition-colors"
+              title="重新打开引导"
+            >
+              ◇ 引导
+            </button>
             <SettingsPanel />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-deep-800/60 border tk-border-faint">
               <span className="status-dot bg-electric" />
@@ -103,7 +128,7 @@ export default function App() {
               <button
                 key={tab.key}
                 disabled={!tab.ready}
-                onClick={() => tab.ready && setActiveModule(tab.key)}
+                onClick={() => tab.ready && setActiveModule(tab.key as any)}
                 className={`
                   relative py-4 px-5 text-[14px] tracking-[0.04em] font-medium transition-all duration-200
                   focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-300/40 focus-visible:rounded
@@ -172,11 +197,7 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t tk-border-faint py-4 text-center">
-        <p className="text-[10px] font-mono tk-text-faint tracking-[0.22em]">
-          POWERED BY CLAUDE API · REAL-TIME TOKEN TRACKING
-        </p>
-      </footer>
+      <DisclaimerFooter />
     </div>
   );
 }

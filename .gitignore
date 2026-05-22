@@ -29,6 +29,13 @@ frontend/dist/
 .logs
 .runs
 
+# Experiment outputs — produced by auto-loop / pilot scripts, not source
+runs/
+backend/runs/
+backend/pilot_runs/
+backend/evaluation/
+benchmark/
+
 # Docker
 *.log
 

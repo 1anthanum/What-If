@@ -18,10 +18,14 @@ Usage in services:
 
 import logging
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Union
 
 from app.config import get_settings
 from app.core.token_tracker import TokenTracker
+from app.core.claude_client import _flatten_system
+
+# Same shape as ClaudeClient's SystemPrompt — string or content blocks.
+SystemPrompt = Union[str, list[dict]]
 
 logger = logging.getLogger(__name__)
 
@@ -32,23 +36,29 @@ class InferenceBackend(ABC):
     @abstractmethod
     async def complete(
         self,
-        system_prompt: str,
+        system_prompt: SystemPrompt,
         messages: list[dict],
         max_tokens: int = 2048,
         temperature: float = 0.7,
     ) -> str:
-        """Non-streaming completion. Returns full response text."""
+        """Non-streaming completion. Returns full response text.
+
+        ``system_prompt`` accepts either a plain string or a list of
+        Anthropic-shaped content blocks (use ``cached_system`` to mark
+        a block as cacheable). Non-Anthropic backends flatten blocks
+        to text automatically."""
         ...
 
     @abstractmethod
     async def stream(
         self,
-        system_prompt: str,
+        system_prompt: SystemPrompt,
         messages: list[dict],
         max_tokens: int = 2048,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
-        """Streaming completion. Yields text chunks."""
+        """Streaming completion. Yields text chunks. ``system_prompt``
+        accepts the same shape as :meth:`complete`."""
         ...
 
     @abstractmethod
@@ -63,14 +73,15 @@ class ClaudeBackend(InferenceBackend):
     Supports per-call model override via the `model` field.
     """
 
-    def __init__(self, tracker: TokenTracker, model: str | None = None):
+    def __init__(self, tracker: TokenTracker, model: str | None = None, tier: str | None = None):
         from app.core.claude_client import ClaudeClient
         self._client = ClaudeClient(token_tracker=tracker)
         self._model = model  # None = use default from settings
+        self._tier = tier
 
     async def complete(
         self,
-        system_prompt: str,
+        system_prompt: SystemPrompt,
         messages: list[dict],
         max_tokens: int = 2048,
         temperature: float = 0.7,
@@ -80,11 +91,12 @@ class ClaudeBackend(InferenceBackend):
             max_tokens=max_tokens,
             temperature=temperature,
             model=self._model,
+            tier=self._tier,
         )
 
     async def stream(
         self,
-        system_prompt: str,
+        system_prompt: SystemPrompt,
         messages: list[dict],
         max_tokens: int = 2048,
         temperature: float = 0.7,
@@ -94,6 +106,7 @@ class ClaudeBackend(InferenceBackend):
             max_tokens=max_tokens,
             temperature=temperature,
             model=self._model,
+            tier=self._tier,
         ):
             yield chunk
 
@@ -117,6 +130,7 @@ class OllamaBackend(InferenceBackend):
         tracker: TokenTracker,
         base_url: str = "http://localhost:11434",
         model: str = "qwen2.5:7b",
+        tier: str | None = None,
     ):
         self._tracker = tracker
         # Defensive: empty base_url → use loopback default. Empty string would
@@ -126,20 +140,29 @@ class OllamaBackend(InferenceBackend):
             url = "http://localhost:11434"
         self._base_url = url
         self._model = model
+        self._tier = tier
 
     async def complete(
         self,
-        system_prompt: str,
+        system_prompt: SystemPrompt,
         messages: list[dict],
         max_tokens: int = 2048,
         temperature: float = 0.7,
     ) -> str:
         import httpx
 
-        ollama_messages = [{"role": "system", "content": system_prompt}]
+        system_text = _flatten_system(system_prompt)
+        ollama_messages = [{"role": "system", "content": system_text}]
         for m in messages:
             ollama_messages.append({"role": m["role"], "content": m["content"]})
 
+        options: dict = {
+            "num_predict": max_tokens,
+            "temperature": temperature,
+        }
+        seed = getattr(self._tracker, "llm_seed", None)
+        if seed is not None:
+            options["seed"] = int(seed)
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(
@@ -148,10 +171,7 @@ class OllamaBackend(InferenceBackend):
                         "model": self._model,
                         "messages": ollama_messages,
                         "stream": False,
-                        "options": {
-                            "num_predict": max_tokens,
-                            "temperature": temperature,
-                        },
+                        "options": options,
                     },
                 )
                 resp.raise_for_status()
@@ -166,6 +186,8 @@ class OllamaBackend(InferenceBackend):
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 label=f"ollama:{self._model}",
+                backend_spec=f"ollama:{self._model}",
+                tier=self._tier,
             )
 
             return content
@@ -176,20 +198,28 @@ class OllamaBackend(InferenceBackend):
 
     async def stream(
         self,
-        system_prompt: str,
+        system_prompt: SystemPrompt,
         messages: list[dict],
         max_tokens: int = 2048,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         import httpx
 
-        ollama_messages = [{"role": "system", "content": system_prompt}]
+        system_text = _flatten_system(system_prompt)
+        ollama_messages = [{"role": "system", "content": system_text}]
         for m in messages:
             ollama_messages.append({"role": m["role"], "content": m["content"]})
 
         prompt_tokens = 0
         completion_tokens = 0
 
+        stream_options: dict = {
+            "num_predict": max_tokens,
+            "temperature": temperature,
+        }
+        seed = getattr(self._tracker, "llm_seed", None)
+        if seed is not None:
+            stream_options["seed"] = int(seed)
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 async with client.stream(
@@ -199,10 +229,7 @@ class OllamaBackend(InferenceBackend):
                         "model": self._model,
                         "messages": ollama_messages,
                         "stream": True,
-                        "options": {
-                            "num_predict": max_tokens,
-                            "temperature": temperature,
-                        },
+                        "options": stream_options,
                     },
                 ) as resp:
                     resp.raise_for_status()
@@ -228,6 +255,8 @@ class OllamaBackend(InferenceBackend):
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 label=f"ollama-stream:{self._model}",
+                backend_spec=f"ollama:{self._model}",
+                tier=self._tier,
             )
 
     def backend_name(self) -> str:
@@ -252,12 +281,14 @@ class OpenAICompatibleBackend(InferenceBackend):
         base_url: str,
         api_key: str,
         model: str,
+        tier: str | None = None,
     ):
         self._tracker = tracker
         self._provider = provider_label
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
+        self._tier = tier
 
     def _headers(self) -> dict:
         return {
@@ -265,8 +296,9 @@ class OpenAICompatibleBackend(InferenceBackend):
             "Content-Type": "application/json",
         }
 
-    def _build_messages(self, system_prompt: str, messages: list[dict]) -> list[dict]:
-        out = [{"role": "system", "content": system_prompt}] if system_prompt else []
+    def _build_messages(self, system_prompt: SystemPrompt, messages: list[dict]) -> list[dict]:
+        system_text = _flatten_system(system_prompt)
+        out = [{"role": "system", "content": system_text}] if system_text else []
         for m in messages:
             out.append({"role": m["role"], "content": m["content"]})
         return out
@@ -287,24 +319,31 @@ class OpenAICompatibleBackend(InferenceBackend):
 
     async def complete(
         self,
-        system_prompt: str,
+        system_prompt: SystemPrompt,
         messages: list[dict],
         max_tokens: int = 2048,
         temperature: float = 0.7,
     ) -> str:
         import httpx
+        # GPT-5 / o-series consume a large hidden chunk of the budget on
+        # reasoning before emitting visible content. The 2026-05-11 Y3
+        # pilot saw gpt-5-mini return empty strings on stance extraction
+        # at max_tokens=800; bumping to a floor here recovers them.
+        effective_max_tokens = max_tokens
+        if self._is_strict_openai():
+            effective_max_tokens = max(max_tokens, 4000)
         body: dict = {
             "model": self._model,
             "messages": self._build_messages(system_prompt, messages),
-            self._token_field(): max_tokens,
+            self._token_field(): effective_max_tokens,
             "temperature": self._coerce_temperature(temperature),
             "stream": False,
         }
-        # GPT-5 / o-series spends a lot of tokens on hidden reasoning before
-        # producing visible content — set reasoning_effort=low so most of the
-        # max_tokens budget goes to the actual answer.
         if self._is_strict_openai():
             body["reasoning_effort"] = "low"
+        seed = getattr(self._tracker, "llm_seed", None)
+        if seed is not None:
+            body["seed"] = int(seed)
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 resp = await client.post(
@@ -326,10 +365,14 @@ class OpenAICompatibleBackend(InferenceBackend):
             # in reasoning_content and an empty/null content. Fall back to it.
             content = msg.get("content") or msg.get("reasoning_content") or ""
             usage = data.get("usage") or {}
+            cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
             self._tracker.record(
                 input_tokens=usage.get("prompt_tokens", 0),
                 output_tokens=usage.get("completion_tokens", 0),
                 label=f"{self._provider}:{self._model}",
+                cached_input_tokens=cached,
+                backend_spec=f"{self._provider}:{self._model}",
+                tier=self._tier,
             )
             return content
         except Exception as e:
@@ -338,21 +381,27 @@ class OpenAICompatibleBackend(InferenceBackend):
 
     async def stream(
         self,
-        system_prompt: str,
+        system_prompt: SystemPrompt,
         messages: list[dict],
         max_tokens: int = 2048,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         import httpx, json as _json
+        effective_max_tokens = max_tokens
+        if self._is_strict_openai():
+            effective_max_tokens = max(max_tokens, 4000)
         body: dict = {
             "model": self._model,
             "messages": self._build_messages(system_prompt, messages),
-            self._token_field(): max_tokens,
+            self._token_field(): effective_max_tokens,
             "temperature": self._coerce_temperature(temperature),
             "stream": True,
         }
         if self._is_strict_openai():
             body["reasoning_effort"] = "low"
+        seed = getattr(self._tracker, "llm_seed", None)
+        if seed is not None:
+            body["seed"] = int(seed)
         prompt_tokens = 0
         completion_tokens = 0
         try:
@@ -403,6 +452,8 @@ class OpenAICompatibleBackend(InferenceBackend):
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 label=f"{self._provider}-stream:{self._model}",
+                backend_spec=f"{self._provider}:{self._model}",
+                tier=self._tier,
             )
 
     def backend_name(self) -> str:
@@ -429,10 +480,11 @@ def get_fast_backend(tracker: TokenTracker) -> InferenceBackend:
             tracker=tracker,
             base_url=settings.ollama_base_url,
             model=getattr(settings, "ollama_model", "qwen2.5:7b"),
+            tier="cheap",
         )
 
     # Fallback: Claude Haiku
-    return ClaudeBackend(tracker=tracker, model="claude-haiku-4-5-20251001")
+    return ClaudeBackend(tracker=tracker, model="claude-haiku-4-5-20251001", tier="cheap")
 
 
 def get_strong_backend(tracker: TokenTracker, model: str | None = None) -> InferenceBackend:
@@ -443,11 +495,12 @@ def get_strong_backend(tracker: TokenTracker, model: str | None = None) -> Infer
             tracker=tracker,
             base_url=settings.ollama_base_url,
             model=getattr(settings, "ollama_model", "qwen2.5:7b"),
+            tier="strong",
         )
     if model:
-        return ClaudeBackend(tracker=tracker, model=model)
+        return ClaudeBackend(tracker=tracker, model=model, tier="strong")
     spec = getattr(settings, "tier_judge", "claude:claude-sonnet-4-6")
-    return get_backend_from_spec(spec, tracker)
+    return get_backend_from_spec(spec, tracker, tier="strong")
 
 
 def get_model_pool(tracker: TokenTracker) -> list[InferenceBackend]:
@@ -471,7 +524,7 @@ def get_model_pool(tracker: TokenTracker) -> list[InferenceBackend]:
         backends = []
         for s in specs:
             try:
-                backends.append(get_backend_from_spec(s, tracker))
+                backends.append(get_backend_from_spec(s, tracker, tier="persona"))
             except Exception as e:
                 logger.warning(f"persona pool: skipping invalid spec '{s}': {e}")
         if backends:
@@ -482,7 +535,7 @@ def get_model_pool(tracker: TokenTracker) -> list[InferenceBackend]:
         models = [m.strip() for m in ollama_pool_str.split(",") if m.strip()]
         if models:
             return [
-                OllamaBackend(tracker=tracker, base_url=base_url, model=m)
+                OllamaBackend(tracker=tracker, base_url=base_url, model=m, tier="persona")
                 for m in models
             ]
 
@@ -498,7 +551,7 @@ def get_backend_for_persona(
     return pool[persona_index % len(pool)]
 
 
-def get_backend_from_spec(spec: str, tracker: TokenTracker) -> InferenceBackend:
+def get_backend_from_spec(spec: str, tracker: TokenTracker, tier: str | None = None) -> InferenceBackend:
     """Parse a `provider:model` spec and return the appropriate backend.
 
     Supported providers:
@@ -509,21 +562,24 @@ def get_backend_from_spec(spec: str, tracker: TokenTracker) -> InferenceBackend:
         deepseek:<model>   → DeepSeek (OpenAI-compatible)
 
     Falls back to Claude/default on any unrecognized spec.
+
+    `tier` is propagated to TokenTracker records for per-tier cost reporting (Y1).
     """
     settings = get_settings()
     if ":" not in spec:
-        return ClaudeBackend(tracker=tracker, model=spec)
+        return ClaudeBackend(tracker=tracker, model=spec, tier=tier)
     provider, _, model = spec.partition(":")
     provider = provider.strip().lower()
     model = model.strip()
 
     if provider == "claude":
-        return ClaudeBackend(tracker=tracker, model=model)
+        return ClaudeBackend(tracker=tracker, model=model, tier=tier)
     if provider == "ollama":
         return OllamaBackend(
             tracker=tracker,
             base_url=getattr(settings, "ollama_base_url", "http://localhost:11434"),
             model=model or getattr(settings, "ollama_model", "qwen2.5:7b"),
+            tier=tier,
         )
     if provider == "openai":
         return OpenAICompatibleBackend(
@@ -532,6 +588,7 @@ def get_backend_from_spec(spec: str, tracker: TokenTracker) -> InferenceBackend:
             base_url=getattr(settings, "openai_base_url", "https://api.openai.com/v1"),
             api_key=getattr(settings, "openai_api_key", ""),
             model=model,
+            tier=tier,
         )
     if provider == "glm":
         return OpenAICompatibleBackend(
@@ -540,6 +597,7 @@ def get_backend_from_spec(spec: str, tracker: TokenTracker) -> InferenceBackend:
             base_url=getattr(settings, "glm_base_url", "https://open.bigmodel.cn/api/paas/v4"),
             api_key=getattr(settings, "glm_api_key", ""),
             model=model,
+            tier=tier,
         )
     if provider == "deepseek":
         return OpenAICompatibleBackend(
@@ -548,32 +606,33 @@ def get_backend_from_spec(spec: str, tracker: TokenTracker) -> InferenceBackend:
             base_url=getattr(settings, "deepseek_base_url", "https://api.deepseek.com/v1"),
             api_key=getattr(settings, "deepseek_api_key", ""),
             model=model,
+            tier=tier,
         )
     logger.warning(f"Unknown backend provider '{provider}' — falling back to Claude")
-    return ClaudeBackend(tracker=tracker, model=model)
+    return ClaudeBackend(tracker=tracker, model=model, tier=tier)
 
 
 def get_cheap_backend(tracker: TokenTracker) -> InferenceBackend:
     """Tier-1 — cheap/fast for tagging, label generation, injection variants."""
     settings = get_settings()
     spec = getattr(settings, "tier_cheap", "claude:claude-haiku-4-5-20251001")
-    return get_backend_from_spec(spec, tracker)
+    return get_backend_from_spec(spec, tracker, tier="cheap")
 
 
 def get_judge_backend(tracker: TokenTracker) -> InferenceBackend:
     """Tier-2 — per-round evaluation, synthesis. Sonnet by default."""
     settings = get_settings()
     if getattr(settings, "strong_backend_override", "") == "ollama" and getattr(settings, "ollama_base_url", ""):
-        return OllamaBackend(tracker=tracker, base_url=settings.ollama_base_url, model=getattr(settings, "ollama_model", "qwen2.5:7b"))
+        return OllamaBackend(tracker=tracker, base_url=settings.ollama_base_url, model=getattr(settings, "ollama_model", "qwen2.5:7b"), tier="judge")
     spec = getattr(settings, "tier_judge", "claude:claude-sonnet-4-6")
-    return get_backend_from_spec(spec, tracker)
+    return get_backend_from_spec(spec, tracker, tier="judge")
 
 
 def get_decider_backend(tracker: TokenTracker) -> InferenceBackend:
     """Tier-3 — final calls / meta-synthesis. Opus by default. Used sparingly."""
     settings = get_settings()
     spec = getattr(settings, "tier_decider", "claude:claude-opus-4-7")
-    return get_backend_from_spec(spec, tracker)
+    return get_backend_from_spec(spec, tracker, tier="decider")
 
 
 def get_summarizer_backend(tracker: TokenTracker) -> InferenceBackend:
@@ -587,5 +646,5 @@ def get_summarizer_backend(tracker: TokenTracker) -> InferenceBackend:
     summarizer_model = getattr(settings, "ollama_summarizer_model", "") or getattr(settings, "ollama_model", "")
 
     if base_url and summarizer_model:
-        return OllamaBackend(tracker=tracker, base_url=base_url, model=summarizer_model)
+        return OllamaBackend(tracker=tracker, base_url=base_url, model=summarizer_model, tier="summarizer")
     return get_fast_backend(tracker)

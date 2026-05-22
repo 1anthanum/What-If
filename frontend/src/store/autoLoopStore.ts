@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { autoLoopApi, type AutoLoopConfig, type AutoLoopMode, type StanceMatrix } from '../services/api';
+import { persist } from 'zustand/middleware';
+import { autoLoopApi, type AutoLoopConfig, type AutoLoopMode, type StanceMatrix, type JudgeVerdict } from '../services/api';
 
 export type AutoLoopStatus = 'idle' | 'running' | 'complete' | 'cancelled' | 'error';
 
@@ -10,6 +11,16 @@ export interface PhilPersonaState {
   model: string;
   content: string;
   streaming: boolean;
+  reflection?: string;       // Method B: self-reflection
+}
+
+export interface SubQuestionState {
+  idx: number;
+  title: string;
+  question: string;
+  domain: string;
+  personas: PhilPersonaState[];
+  synthesis: string;
 }
 
 export interface CycleState {
@@ -27,6 +38,12 @@ export interface CycleState {
   stanceMatrix: StanceMatrix | null;
   // Feature 3: Branching candidates
   candidateQuestions: string[];
+  // Method A: Subquestion decomposition
+  subQuestions: SubQuestionState[];
+  subdomainRouting?: boolean;
+  isSubqMaster?: boolean;
+  // Judge verdict — explicit ruling on contested points
+  judgeVerdict?: JudgeVerdict | null;
 }
 
 interface AutoLoopState {
@@ -95,7 +112,9 @@ const initialState = {
   elapsedSeconds: 0,
 };
 
-export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
+export const useAutoLoopStore = create<AutoLoopState>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   start: async (config: AutoLoopConfig) => {
@@ -142,6 +161,8 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
               personas: [],
               stanceMatrix: null,
               candidateQuestions: [],
+              subQuestions: [],
+              judgeVerdict: null,
             };
             set((s) => ({
               currentCycle: event.data.cycle as number,
@@ -221,13 +242,150 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
             updateCurrentCycle(set, get, {
               synthesisPreview: event.data.synthesis as string,
               activeModule: null,
+              isSubqMaster: !!event.data.is_subq_master,
             });
+            break;
+
+          // ── Method B: self-reflection (non-subq path) ──
+          case 'phil_self_reflection': {
+            const personaId = event.data.persona_id as string;
+            const reflection = event.data.reflection as string;
+            const state = get();
+            const cycles = [...state.cycles];
+            const last = cycles[cycles.length - 1];
+            if (last) {
+              last.personas = last.personas.map(p =>
+                p.id === personaId ? { ...p, reflection } : p
+              );
+              set({ cycles });
+            }
+            break;
+          }
+
+          // ── Method A: subquestion decomposition ──
+          case 'phil_subqs_proposed': {
+            const subqs = (event.data.sub_questions as any[]) || [];
+            const subQuestions = subqs.map((sq, idx) => ({
+              idx,
+              title: sq.title,
+              question: sq.question,
+              domain: sq.domain,
+              personas: [] as PhilPersonaState[],
+              synthesis: '',
+            }));
+            updateCurrentCycle(set, get, {
+              subQuestions,
+              subdomainRouting: !!event.data.subdomain_routing,
+            });
+            break;
+          }
+          case 'phil_subq_persona_start': {
+            const subqIdx = event.data.subq_idx as number;
+            const state = get();
+            const cycles = [...state.cycles];
+            const last = cycles[cycles.length - 1];
+            if (last && last.subQuestions[subqIdx]) {
+              const sq = { ...last.subQuestions[subqIdx] };
+              sq.personas = [...sq.personas, {
+                id: event.data.persona_id as string,
+                name: event.data.persona_name as string,
+                role: '',
+                model: (event.data.model as string) || '',
+                content: '',
+                streaming: true,
+              }];
+              last.subQuestions = [...last.subQuestions];
+              last.subQuestions[subqIdx] = sq;
+              set({ cycles });
+            }
+            break;
+          }
+          case 'phil_subq_persona_chunk': {
+            const subqIdx = event.data.subq_idx as number;
+            const personaId = event.data.persona_id as string;
+            const text = (event.data.text as string) || '';
+            const state = get();
+            const cycles = [...state.cycles];
+            const last = cycles[cycles.length - 1];
+            if (last && last.subQuestions[subqIdx]) {
+              const sq = { ...last.subQuestions[subqIdx] };
+              sq.personas = sq.personas.map(p =>
+                p.id === personaId && p.streaming
+                  ? { ...p, content: p.content + text }
+                  : p
+              );
+              last.subQuestions = [...last.subQuestions];
+              last.subQuestions[subqIdx] = sq;
+              set({ cycles });
+            }
+            break;
+          }
+          case 'phil_subq_persona_complete': {
+            const subqIdx = event.data.subq_idx as number;
+            const personaId = event.data.persona_id as string;
+            const content = (event.data.content as string) || '';
+            const state = get();
+            const cycles = [...state.cycles];
+            const last = cycles[cycles.length - 1];
+            if (last && last.subQuestions[subqIdx]) {
+              const sq = { ...last.subQuestions[subqIdx] };
+              sq.personas = sq.personas.map(p =>
+                p.id === personaId ? { ...p, content, streaming: false } : p
+              );
+              last.subQuestions = [...last.subQuestions];
+              last.subQuestions[subqIdx] = sq;
+              set({ cycles });
+            }
+            break;
+          }
+          case 'phil_subq_self_reflection': {
+            const subqIdx = event.data.subq_idx as number;
+            const personaId = event.data.persona_id as string;
+            const reflection = event.data.reflection as string;
+            const state = get();
+            const cycles = [...state.cycles];
+            const last = cycles[cycles.length - 1];
+            if (last && last.subQuestions[subqIdx]) {
+              const sq = { ...last.subQuestions[subqIdx] };
+              sq.personas = sq.personas.map(p =>
+                p.id === personaId ? { ...p, reflection } : p
+              );
+              last.subQuestions = [...last.subQuestions];
+              last.subQuestions[subqIdx] = sq;
+              set({ cycles });
+            }
+            break;
+          }
+          case 'phil_subq_synth_done': {
+            const subqIdx = event.data.subq_idx as number;
+            const synthesis = event.data.synthesis as string;
+            const state = get();
+            const cycles = [...state.cycles];
+            const last = cycles[cycles.length - 1];
+            if (last && last.subQuestions[subqIdx]) {
+              last.subQuestions = [...last.subQuestions];
+              last.subQuestions[subqIdx] = { ...last.subQuestions[subqIdx], synthesis };
+              set({ cycles });
+            }
+            break;
+          }
+          case 'phil_subq_decompose_start':
+          case 'phil_subq_start':
+          case 'phil_subq_master_start':
+            // status-only events; UI can listen if needed
             break;
 
           // ── Feature 1: Stance matrix ──
           case 'phil_stance_matrix':
             updateCurrentCycle(set, get, {
               stanceMatrix: event.data.matrix as StanceMatrix,
+            });
+            break;
+
+          // ── Judge verdict — explicit verdicts on contested points ──
+          case 'phil_judge_verdict':
+            updateCurrentCycle(set, get, {
+              judgeVerdict: event.data.verdict as JudgeVerdict,
             });
             break;
 
@@ -334,7 +492,51 @@ export const useAutoLoopStore = create<AutoLoopState>((set, get) => ({
       set({ elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000) });
     }
   },
-}));
+    }),
+    {
+      name: 'whatif-auto-loop-store',
+      version: 1,
+      partialize: (s) => ({
+        sessionId: s.sessionId,
+        config: s.config,
+        mode: s.mode,
+        currentCycle: s.currentCycle,
+        maxCycles: s.maxCycles,
+        cycles: s.cycles,
+        evolutionChain: s.evolutionChain,
+        stoppedReason: s.stoppedReason,
+        finalSynthesis: s.finalSynthesis,
+        adversarial: s.adversarial,
+        extractStances: s.extractStances,
+        branching: s.branching,
+        totalPersonaWords: s.totalPersonaWords,
+        startedAt: s.startedAt,
+        elapsedSeconds: s.elapsedSeconds,
+        // Only persist terminal statuses; running streams are dead post-reload.
+        status: (s.status === 'complete' || s.status === 'cancelled' || s.status === 'error')
+          ? s.status
+          : 'idle',
+      }),
+      merge: (persistedRaw, current) => {
+        const persisted = (persistedRaw as Partial<AutoLoopState>) ?? {};
+        // Freeze any in-flight persona streams in saved cycles.
+        const frozen = (persisted.cycles ?? []).map((c) => ({
+          ...c,
+          personas: c.personas.map((p) => (p.streaming ? { ...p, streaming: false } : p)),
+        }));
+        return {
+          ...current,
+          ...persisted,
+          cycles: frozen,
+          status: persisted.status ?? 'idle',
+          activePersonaId: null,
+          finalSynthPending: false,
+          error: null,
+        };
+      },
+    },
+  ),
+);
 
 type SetFn = (fn: (s: AutoLoopState) => Partial<AutoLoopState>) => void;
 type GetFn = () => AutoLoopState;

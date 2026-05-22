@@ -1,0 +1,53 @@
+# Per-backend pricing (USD per token).
+# Spec: ../../../../What-If-paper/methodology/Y1_efficiency_logging.md
+# The TokenTracker reads this at record-time to assign a per-call cost; the
+# value is then frozen on the TokenRecord so re-running summary() never drifts.
+#
+# Numbers below are public list prices captured 2026-05-11; cached_input_per_token
+# is the discounted cache-hit rate where the provider exposes one. Anthropic
+# cache_read is ~10× cheaper than fresh input; OpenAI cached is 50% off.
+#
+# Update this file when prices change. Each entry is keyed by the exact
+# `backend_spec` string the TokenTracker sees (e.g. "claude:claude-opus-4-7").
+
+default:
+  input_per_token: 3.0e-6
+  cached_input_per_token: 0.3e-6
+  output_per_token: 15.0e-6
+
+"claude:claude-opus-4-7":
+  input_per_token: 15.0e-6
+  cached_input_per_token: 1.5e-6
+  output_per_token: 75.0e-6
+
+"claude:claude-sonnet-4-6":
+  input_per_token: 3.0e-6
+  cached_input_per_token: 0.3e-6
+  output_per_token: 15.0e-6
+
+"claude:claude-haiku-4-5-20251001":
+  input_per_token: 0.8e-6
+  cached_input_per_token: 0.08e-6
+  output_per_token: 4.0e-6
+
+"openai:gpt-5-mini":
+  input_per_token: 0.4e-6
+  cached_input_per_token: 0.2e-6
+  output_per_token: 1.6e-6
+
+"deepseek:deepseek-chat":
+  input_per_token: 0.27e-6
+  cached_input_per_token: 0.07e-6
+  output_per_token: 1.10e-6
+
+"glm:glm-4-plus":
+  input_per_token: 0.7e-6
+  cached_input_per_token: 0.7e-6
+  output_per_token: 2.1e-6
+
+# Ollama is local — zero monetary cost but worth recording as a row so
+# summaries are exhaustive. Bump if you decide to amortize GPU time.
+"ollama:qwen2.5:7b":
+  input_per_token: 0.0
+  cached_input_per_token: 0.0
+  output_per_token: 0.0

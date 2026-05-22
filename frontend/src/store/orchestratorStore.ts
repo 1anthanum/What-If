@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import {
   orchestratorApi,
   FeedbackLoopConfig,
@@ -46,7 +47,9 @@ const initialState = {
   tokenUsage: null,
 };
 
-export const useOrchestratorStore = create<OrchestratorState>((set, get) => ({
+export const useOrchestratorStore = create<OrchestratorState>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   startFeedbackLoop: async (config: FeedbackLoopConfig) => {
@@ -150,7 +153,35 @@ export const useOrchestratorStore = create<OrchestratorState>((set, get) => ({
   },
 
   reset: () => set(initialState),
-}));
+    }),
+    {
+      name: 'whatif-orchestrator-store',
+      version: 1,
+      partialize: (s) => ({
+        loopId: s.loopId,
+        config: s.config,
+        currentIteration: s.currentIteration,
+        maxIterations: s.maxIterations,
+        iterations: s.iterations,
+        finalSynthesis: s.finalSynthesis,
+        convergenceAchieved: s.convergenceAchieved,
+        tokenUsage: s.tokenUsage,
+        // Keep status only if terminal — running streams die on reload.
+        status: s.status === 'complete' || s.status === 'error' ? s.status : 'idle',
+      }),
+      merge: (persistedRaw, current) => {
+        const persisted = (persistedRaw as Partial<OrchestratorState>) ?? {};
+        return {
+          ...current,
+          ...persisted,
+          status: persisted.status ?? 'idle',
+          activeModule: null,
+          error: null,
+        };
+      },
+    },
+  ),
+);
 
 /**
  * Helper: update or append an iteration in the iterations array.

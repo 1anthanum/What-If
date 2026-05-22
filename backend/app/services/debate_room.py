@@ -9,7 +9,7 @@ Multi-model support:
 import uuid
 from typing import AsyncGenerator
 
-from app.core.claude_client import ClaudeClient
+from app.core.claude_client import ClaudeClient, cached_system
 from app.core.inference import InferenceBackend, get_backend_for_persona
 from app.core.prompt_engine import PromptEngine
 from app.core.streaming import sse_event
@@ -211,11 +211,16 @@ class DebateRoomService:
                 injected_event=injected_event,
                 round_number=round_num,
             )
+            # Popper falsifiability — force every persona to surface what
+            # would change its mind. Responses missing this line get
+            # tagged as 'dogmatic' in the UI.
+            from app.services.auto_loop import FALSIFIABILITY_DIRECTIVE_ZH
+            user_prompt += FALSIFIABILITY_DIRECTIVE_ZH
 
             # Stream the response via the assigned backend
             full_response = []
             async for chunk in backend.stream(
-                system_prompt=persona["system_prompt"],
+                system_prompt=cached_system(persona["system_prompt"]),
                 messages=[{"role": "user", "content": user_prompt}],
                 max_tokens=params["persona_max_tokens"],
                 temperature=params["persona_temperature"],

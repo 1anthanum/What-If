@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import {
   counterfactualApi,
   type HistoricalEventSummary,
@@ -158,7 +159,9 @@ const INITIAL_STATE = {
   expandedPointYear: null as number | null,
 };
 
-export const useCounterfactualStore = create<CounterfactualState>((set, get) => ({
+export const useCounterfactualStore = create<CounterfactualState>()(
+  persist(
+    (set, get) => ({
   ...INITIAL_STATE,
 
   loadEvents: async () => {
@@ -770,4 +773,66 @@ export const useCounterfactualStore = create<CounterfactualState>((set, get) => 
   },
 
   toggleConeView: () => set((s) => ({ coneViewEnabled: !s.coneViewEnabled })),
-}));
+    }),
+    {
+      name: 'whatif-counterfactual-store',
+      version: 1,
+      partialize: (s) => ({
+        // Selection
+        selectedEvent: s.selectedEvent,
+        // Single timeline
+        timelineId: s.timelineId,
+        modification: s.modification,
+        timelinePoints: s.timelinePoints,
+        summary: s.summary,
+        keyDivergences: s.keyDivergences,
+        butterflyEffects: s.butterflyEffects,
+        // Exploration mode
+        explorationMode: s.explorationMode,
+        fanId: s.fanId,
+        explorationClusters: s.explorationClusters,
+        possibilityBranches: s.possibilityBranches,
+        selectedBranchIndex: s.selectedBranchIndex,
+        totalExplorations: s.totalExplorations,
+        // Falsification (only if done)
+        falsifyStatus: s.falsifyStatus === 'complete' ? s.falsifyStatus : 'idle',
+        vulnerabilityIndex: s.vulnerabilityIndex,
+        vulnerabilityPoints: s.vulnerabilityPoints,
+        methodologyNote: s.methodologyNote,
+        strongestClaimYear: s.strongestClaimYear,
+        weakestClaimYear: s.weakestClaimYear,
+        // Annotations
+        annotations: s.annotations,
+        // Attractor (only if complete)
+        attractorStatus: s.attractorStatus === 'complete' ? s.attractorStatus : 'idle',
+        attractorAnalysis: s.attractorAnalysis,
+        attractorModifications: s.attractorModifications,
+        // Embodied
+        personas: s.personas,
+        selectedPersonaIds: s.selectedPersonaIds,
+        embodiedCoalitions: s.embodiedCoalitions,
+        // UI
+        coneViewEnabled: s.coneViewEnabled,
+        tokenUsage: s.tokenUsage,
+      }),
+      merge: (persistedRaw, current) => {
+        const persisted = (persistedRaw as Partial<CounterfactualState>) ?? {};
+        return {
+          ...current,
+          ...persisted,
+          // Events list is loaded on demand from API — drop stale cache.
+          events: current.events,
+          // Volatile state always resets.
+          status: 'idle',
+          error: null,
+          streamingText: '',
+          explorationStage: persisted.possibilityBranches && persisted.possibilityBranches.length > 0 ? 'complete' : 'idle',
+          explorationProgress: 0,
+          attractorProgress: { current: 0, total: 0 },
+          annotatingYear: null,
+          expandedPointYear: null,
+        };
+      },
+    },
+  ),
+);

@@ -1,0 +1,21 @@
+{# version: 2026-05-17-en
+   purpose: baseline_b0_zero_shot
+   author: jacie
+   parent: baseline_b0_zero_shot
+   notes: English translation of the B0 baseline prompt for the bilingual
+          replication. Identical structure to the zh version; only natural
+          language changes. Token budget and JSON schema are unchanged.
+#}
+You are a debate analyst. After reading the counterfactual scenario below, simultaneously take on five distinct philosophical traditions (rationalist, existentialist, pragmatist, eastern_philosopher, critical_theorist), list 4–6 core arguments/positions, and score each persona on each argument.
+
+Scoring rule:
+- 1.0 = strongly support
+- 0.5 = lean support
+- 0.0 = neutral / no stance
+- -0.5 = lean oppose
+- -1.0 = strongly oppose
+
+Output strict JSON only, with no extra explanation or code fences:
+{"arguments": ["argument 1 (≤15 words)", "argument 2", ...], "stances": {"rationalist": [s1, s2, ...], "existentialist": [...], "pragmatist": [...], "eastern_philosopher": [...], "critical_theorist": [...]}}
+
+Each persona's score array length must equal the arguments array length.

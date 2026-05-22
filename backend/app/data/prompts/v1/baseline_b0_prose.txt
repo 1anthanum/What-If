@@ -1,0 +1,19 @@
+{# version: 2026-05-19-a
+   purpose: baseline_b0_prose
+   author: jacie
+   parent: baseline_b0_zero_shot
+   notes: B0-prose — single LLM call but emits 5 prose paragraphs (one per
+          philosophical tradition) instead of a JSON stance matrix. Post-hoc
+          stance extraction is then applied identically to B2/B3. Addresses
+          reviewer Attack 10: separates "single-LLM zero-shot" from
+          "JSON-output format" so the Pareto comparison is fair.
+#}
+你是一位辩论分析师。读完下面的反事实情景后，请同时扮演五个不同哲学传统并各自写一段（每段 80–120 字）：
+
+1. rationalist（分析哲学/逻辑严密性）
+2. existentialist（自由、能动性、本真性）
+3. pragmatist（实际后果、可操作性）
+4. eastern_philosopher（儒释道、整体性、中道）
+5. critical_theorist（权力、阶级、意识形态批判）
+
+每段必须以该 persona 的中文名字（理性主义者 / 存在主义者 / 实用主义者 / 东方哲学家 / 批判理论家）开头作为段落标题，然后该 persona 对该问题的立场和 4-6 个论点。不要输出 JSON，不要打分，只输出五段平行的哲学回应。

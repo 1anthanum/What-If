@@ -12,7 +12,7 @@ const BACKEND_HOST =
   (typeof window !== 'undefined' && window.location.hostname && window.location.protocol.startsWith('http')
     ? `${window.location.protocol}//${window.location.hostname}:8000`
     : 'http://localhost:8000');
-const BASE_URL = `${BACKEND_HOST}/api`;
+export const BASE_URL = `${BACKEND_HOST}/api`;
 
 // Safety belt: any URL that escapes the helpers below missing the scheme
 // gets normalized so fetch never sees a relative path. Logs once at load.
@@ -653,6 +653,24 @@ export interface AutoLoopConfig {
   extract_stances?: boolean;
   branching?: boolean;
   flip_stance?: boolean;
+  subq_decomposition?: boolean;
+  self_reflection?: boolean;
+  subdomain_routing?: boolean;
+  judge_verdict?: boolean;
+  persona_overrides?: Record<string, string>;
+}
+
+export interface JudgeVerdictItem {
+  contested_point: string;
+  winning_position: string;
+  winning_personas: string[];
+  verdict_reason: string;
+  confidence: number;
+}
+export interface JudgeVerdict {
+  verdicts: JudgeVerdictItem[];
+  overall_strongest?: { persona_id: string; reason: string };
+  overall_weakest?: { persona_id: string; reason: string };
 }
 
 // ─── Epistemic Divergence Map Types ──────────────────────
@@ -830,6 +848,16 @@ export interface TopicDecomposition {
   reasoning: string;
   sub_topics: Array<{ title: string; hypothesis: string }>;
 }
+export interface TopicAnalogy {
+  title: string;
+  era: string;
+  why_analogous: string;
+  key_lesson: string;
+  key_difference: string;
+}
+export interface TopicAnalogies {
+  analogies: TopicAnalogy[];
+}
 
 export const topicApi = {
   critique: (topic: string) =>
@@ -839,6 +867,11 @@ export const topicApi = {
     }),
   decompose: (topic: string) =>
     request<TopicDecomposition>(`/orchestrator/topic/decompose`, {
+      method: 'POST',
+      body: JSON.stringify({ topic }),
+    }),
+  analogies: (topic: string) =>
+    request<TopicAnalogies>(`/orchestrator/topic/analogies`, {
       method: 'POST',
       body: JSON.stringify({ topic }),
     }),

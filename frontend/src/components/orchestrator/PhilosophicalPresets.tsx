@@ -162,6 +162,13 @@ export const PHILOSOPHICAL_PRESETS: PhilosophicalPreset[] = [
     question: '如果心理学证明在长期决策上"凭直觉/情感"比"凭分析/计算"准确率更高，那"做理性人"还是不是理性的选择？',
     hook: '理性的自我吞噬 —— 元层面上理性可能要求放弃理性',
   },
+  {
+    id: 'system_over_point',
+    category: 'meta',
+    title: '🕸 系统大于单点',
+    question: '为什么"天衣无缝"的伪造往往被发现，而"漏洞巨大"的规则（手写签名、红绿灯）却几百年稳定运行？是否同一个原理 —— 行为的破绽来自它必须嵌入高维系统，而规则的稳固来自它依赖冗余系统 —— 在从两面起作用？',
+    hook: '陷阱与支撑是同一机制的两面 —— 系统性既是个体的天网，也是规则的兜底',
+  },
 ];
 
 export const CATEGORY_META: Record<PhilosophicalPreset['category'], { label: string; icon: string }> = {
