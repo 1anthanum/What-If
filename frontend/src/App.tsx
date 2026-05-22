@@ -12,6 +12,8 @@ import { OnboardingModal } from './components/common/OnboardingModal';
 import { DisclaimerBanner, DisclaimerFooter } from './components/common/DisclaimerNotice';
 import { MetricsPanel } from './components/common/MetricsPanel';
 import { SessionBrowser } from './components/common/SessionBrowser';
+import { BiasAnalysisPanel } from './components/common/BiasAnalysisPanel';
+import { ConceptEvolutionPanel } from './components/common/ConceptEvolutionPanel';
 import { Button } from './components/common/ui';
 import { useDebateStore } from './store/debateStore';
 import { useCausalStore } from './store/causalStore';
@@ -38,6 +40,8 @@ export default function App() {
   const [onboardingOpen, setOnboardingOpen] = useState(!onboardingSeen);
   const [metricsOpen, setMetricsOpen] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
+  const [biasOpen, setBiasOpen] = useState(false);
+  const [conceptsOpen, setConceptsOpen] = useState(false);
 
   // Determine which module's token usage to show
   const tokenUsage =
@@ -120,6 +124,20 @@ export default function App() {
               title="浏览过往自动循环 session 档案"
             >
               📚 历史
+            </button>
+            <button
+              onClick={() => setBiasOpen(true)}
+              className="text-[11px] font-mono uppercase tracking-[0.18em] text-deep-200/65 hover:text-amber-300 px-2.5 py-1.5 rounded border border-deep-400/20 hover:border-amber-300/35 transition-colors"
+              title="persona × model 跨 session 偏见分析"
+            >
+              🧭 偏见
+            </button>
+            <button
+              onClick={() => setConceptsOpen(true)}
+              className="text-[11px] font-mono uppercase tracking-[0.18em] text-deep-200/65 hover:text-amber-300 px-2.5 py-1.5 rounded border border-deep-400/20 hover:border-amber-300/35 transition-colors"
+              title="跨 session 反复出现的核心概念地图"
+            >
+              💡 概念
             </button>
             <SettingsPanel />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-deep-800/60 border tk-border-faint">
@@ -219,6 +237,12 @@ export default function App() {
 
       {/* Session archive browser */}
       {browserOpen && <SessionBrowser onClose={() => setBrowserOpen(false)} />}
+
+      {/* Bias analysis panel */}
+      {biasOpen && <BiasAnalysisPanel onClose={() => setBiasOpen(false)} />}
+
+      {/* Concept evolution panel */}
+      {conceptsOpen && <ConceptEvolutionPanel onClose={() => setConceptsOpen(false)} />}
 
       {/* Footer */}
       <DisclaimerFooter />

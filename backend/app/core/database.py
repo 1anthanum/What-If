@@ -464,6 +464,123 @@ def session_stats() -> dict:
     }
 
 
+def bias_analytics() -> dict:
+    """Deeper aggregations for the bias-analysis dashboard.
+
+    - per-persona: total statements, dogmatic rate, avg content length,
+      win count (judge verdicts), top models, sample dogmatic statements
+    - per-model: same shape but grouped by `model` instead of persona_id
+    - cross-session: how often each persona has been "judged strongest"
+      vs "weakest" across all completed cycles
+    """
+    import json
+    con = _get_conn()
+
+    # Per-persona aggregates
+    persona_rows = con.execute(
+        """
+        SELECT persona_id,
+               COUNT(*) AS total,
+               SUM(is_dogmatic) AS dogmatic,
+               SUM(CASE WHEN falsifiability IS NOT NULL THEN 1 ELSE 0 END) AS with_fals,
+               AVG(LENGTH(content)) AS avg_len
+        FROM persona_statements
+        GROUP BY persona_id
+        ORDER BY total DESC
+        """
+    ).fetchall()
+    # Top model per persona (most-used)
+    top_model_rows = con.execute(
+        """
+        SELECT persona_id, model, COUNT(*) AS n
+        FROM persona_statements
+        WHERE model IS NOT NULL AND model != ''
+        GROUP BY persona_id, model
+        ORDER BY persona_id, n DESC
+        """
+    ).fetchall()
+    top_model_by_persona: dict[str, list[dict]] = {}
+    for r in top_model_rows:
+        top_model_by_persona.setdefault(r["persona_id"], []).append(
+            {"model": r["model"], "count": r["n"]}
+        )
+
+    # Per-model aggregates
+    model_rows = con.execute(
+        """
+        SELECT model,
+               COUNT(*) AS total,
+               SUM(is_dogmatic) AS dogmatic,
+               AVG(LENGTH(content)) AS avg_len,
+               COUNT(DISTINCT persona_id) AS personas_played
+        FROM persona_statements
+        WHERE model IS NOT NULL AND model != ''
+        GROUP BY model
+        ORDER BY total DESC
+        """
+    ).fetchall()
+
+    # Judge-verdict scoring per persona — count wins by parsing verdict_json
+    verdict_rows = con.execute("SELECT verdict_json FROM judge_verdicts").fetchall()
+    persona_wins: dict[str, int] = {}
+    persona_strongest_count: dict[str, int] = {}
+    persona_weakest_count: dict[str, int] = {}
+    total_verdicts = 0
+    for vr in verdict_rows:
+        try:
+            v = json.loads(vr["verdict_json"])
+        except Exception:
+            continue
+        total_verdicts += 1
+        for item in (v.get("verdicts") or []):
+            for pid in (item.get("winning_personas") or []):
+                persona_wins[pid] = persona_wins.get(pid, 0) + 1
+        s = v.get("overall_strongest") or {}
+        if isinstance(s, dict) and s.get("persona_id"):
+            pid = s["persona_id"]
+            persona_strongest_count[pid] = persona_strongest_count.get(pid, 0) + 1
+        w = v.get("overall_weakest") or {}
+        if isinstance(w, dict) and w.get("persona_id"):
+            pid = w["persona_id"]
+            persona_weakest_count[pid] = persona_weakest_count.get(pid, 0) + 1
+
+    # Build per-persona output combining everything
+    by_persona = []
+    for r in persona_rows:
+        pid = r["persona_id"]
+        total = int(r["total"])
+        by_persona.append({
+            "persona_id": pid,
+            "total_statements": total,
+            "dogmatic_count": int(r["dogmatic"] or 0),
+            "dogmatic_rate": round(100 * (r["dogmatic"] or 0) / total, 1) if total else 0,
+            "with_falsifiability": int(r["with_fals"] or 0),
+            "avg_content_length": round(float(r["avg_len"] or 0), 0),
+            "judge_wins": persona_wins.get(pid, 0),
+            "judge_strongest": persona_strongest_count.get(pid, 0),
+            "judge_weakest": persona_weakest_count.get(pid, 0),
+            "top_models": top_model_by_persona.get(pid, [])[:3],
+        })
+
+    by_model = []
+    for r in model_rows:
+        total = int(r["total"])
+        by_model.append({
+            "model": r["model"],
+            "total_statements": total,
+            "dogmatic_count": int(r["dogmatic"] or 0),
+            "dogmatic_rate": round(100 * (r["dogmatic"] or 0) / total, 1) if total else 0,
+            "avg_content_length": round(float(r["avg_len"] or 0), 0),
+            "personas_played": int(r["personas_played"]),
+        })
+
+    return {
+        "by_persona": by_persona,
+        "by_model": by_model,
+        "total_verdicts_analyzed": total_verdicts,
+    }
+
+
 def delete_session(session_id: str) -> bool:
     """Delete a session and its children. Returns True if a row was removed."""
     with transaction() as con:

@@ -18,6 +18,7 @@ import {
   type SessionListItem,
   type SessionDetail,
   type SessionStats,
+  type ConsistencyReport,
 } from '../../services/sessionsApi';
 
 interface Props {
@@ -260,15 +261,170 @@ export function SessionBrowser({ onClose }: Props) {
   );
 }
 
+/* ──── Time-consistency test modal ──── */
+
+const VERDICT_TONE: Record<string, { label: string; class: string }> = {
+  consistent:         { label: '✓ 一致',     class: 'text-earth-green/95 border-earth-green/45 bg-earth-green/[0.08]' },
+  nuance_shift:       { label: '◐ 细微偏移', class: 'text-amber-300/95 border-amber-300/45 bg-amber-300/[0.08]' },
+  significant_drift:  { label: '⤳ 明显漂移', class: 'text-earth-rust/95 border-earth-rust/45 bg-earth-rust/[0.08]' },
+  contradicted:       { label: '⤬ 矛盾',     class: 'text-earth-rust/95 border-earth-rust/65 bg-earth-rust/[0.14]' },
+  unknown:            { label: '? 未知',     class: 'text-deep-200/65 border-deep-400/35 bg-deep-700/30' },
+};
+
+function ConsistencyTestModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const [data, setData] = useState<ConsistencyReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setData(await sessionsApi.consistencyTest(sessionId));
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [sessionId]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-deep-950/90 backdrop-blur-sm flex items-center justify-center px-6 py-8 animate-fade-in"
+      role="dialog" aria-modal="true" onClick={onClose}
+    >
+      <div
+        className="relative max-w-5xl w-full glass border border-purple-400/30 rounded-xl p-6 shadow-glow-lg max-h-[88vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-deep-200/55 hover:text-amber-300 text-lg font-mono px-2"
+        >
+          ✕
+        </button>
+
+        <div className="mb-4">
+          <div className="inline-flex items-center gap-2 text-[10px] font-mono text-purple-400/95 tracking-[0.22em] uppercase mb-2 px-3 py-1.5 border border-purple-400/45 rounded-full">
+            <span>⏱</span>
+            时间一致性测试
+          </div>
+          <h2 className="text-lg font-light text-white">
+            session <span className="text-amber-300">#{sessionId}</span> 立场漂移检测
+          </h2>
+          <p className="text-[12px] text-deep-100/65 mt-1.5 leading-relaxed">
+            用当下的同一模型 + 同一 persona prompt 重新回答原问题，
+            然后让 strong-tier LLM 评估两次回答的立场一致性。
+            揭示 LLM 在同一议题上的内在稳定性（或不稳定性）。
+          </p>
+        </div>
+
+        {error && (
+          <div className="text-[12px] text-earth-rust/90 bg-earth-rust/10 border border-earth-rust/30 rounded px-3 py-2 mb-3">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center text-[13px] text-deep-200/65 italic">
+            正在重新询问每位 persona…
+          </div>
+        ) : data ? (
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
+            <div className="text-[11px] font-mono text-deep-300/85 tabular-nums">
+              原 session 完成于：{data.original_finished_at?.split('T')[0] ?? '未知'} · 重跑于：{data.replayed_at.split('T')[0]}
+            </div>
+            {data.results.map((r) => {
+              const tone = VERDICT_TONE[r.verdict] || VERDICT_TONE.unknown;
+              return (
+                <div key={r.persona_id} className="rounded-lg border border-deep-400/30 bg-deep-700/20 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[12px] font-mono text-amber-300/90">{r.persona_name}</span>
+                    <span className="text-[10px] font-mono text-deep-300/70">{r.model}</span>
+                    {r.skipped ? (
+                      <span className="ml-auto text-[10px] font-mono text-earth-rust/85">
+                        ✗ {r.error || '跳过'}
+                      </span>
+                    ) : (
+                      <span className={`ml-auto text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border ${tone.class}`}>
+                        {tone.label}
+                      </span>
+                    )}
+                  </div>
+                  {!r.skipped && (
+                    <>
+                      {r.reason && (
+                        <p className="text-[12px] text-deep-100/85 leading-snug italic mb-2">
+                          ↳ {r.reason}
+                        </p>
+                      )}
+                      {(r.key_continuity || r.key_change) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-2 text-[11px]">
+                          {r.key_continuity && (
+                            <div className="rounded bg-earth-green/[0.05] border border-earth-green/25 px-2 py-1">
+                              <span className="font-mono text-earth-green/85 mr-1">保留：</span>
+                              <span className="text-deep-100/85">{r.key_continuity}</span>
+                            </div>
+                          )}
+                          {r.key_change && (
+                            <div className="rounded bg-earth-rust/[0.05] border border-earth-rust/25 px-2 py-1">
+                              <span className="font-mono text-earth-rust/85 mr-1">变化：</span>
+                              <span className="text-deep-100/85">{r.key_change}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div className="text-[11px] rounded bg-deep-800/50 border border-deep-400/30 px-2 py-1.5">
+                          <p className="text-[9px] font-mono text-deep-300/75 uppercase tracking-wider mb-1">原 (Time A)</p>
+                          <p className="text-deep-100/85 leading-snug whitespace-pre-wrap line-clamp-6">
+                            {r.original_content}
+                          </p>
+                        </div>
+                        <div className="text-[11px] rounded bg-amber-300/[0.04] border border-amber-300/30 px-2 py-1.5">
+                          <p className="text-[9px] font-mono text-amber-300/85 uppercase tracking-wider mb-1">新 (Time B)</p>
+                          <p className="text-deep-50 leading-snug whitespace-pre-wrap line-clamp-6">
+                            {r.new_content}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function SessionDetailView({ detail }: { detail: SessionDetail }) {
+  const [consistencyOpen, setConsistencyOpen] = useState(false);
   return (
     <div className="space-y-3 pl-3 pr-1">
       <div>
-        <p className="text-[11px] font-mono text-amber-300/80 uppercase tracking-wider mb-1">
-          种子假设
-        </p>
-        <p className="text-[13px] text-deep-50 leading-relaxed">{detail.seed_hypothesis}</p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-[11px] font-mono text-amber-300/80 uppercase tracking-wider">
+            种子假设
+          </p>
+          <button
+            onClick={() => setConsistencyOpen(true)}
+            className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-purple-400/45 text-purple-200 hover:bg-purple-400/[0.08] transition-colors"
+            title="用当下的 LLM 重跑同一问题，对比 persona 立场是否漂移"
+          >
+            ⏱ 时间一致性测试
+          </button>
+        </div>
+        <p className="text-[13px] text-deep-50 leading-relaxed mt-1">{detail.seed_hypothesis}</p>
       </div>
+      {consistencyOpen && (
+        <ConsistencyTestModal
+          sessionId={detail.session_id}
+          onClose={() => setConsistencyOpen(false)}
+        />
+      )}
 
       {detail.final_synthesis && (
         <div>
