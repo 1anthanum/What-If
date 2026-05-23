@@ -20,6 +20,7 @@ import {
   type SessionStats,
   type ConsistencyReport,
 } from '../../services/sessionsApi';
+import { useTimeCapsuleStore, ageInDays, REVIEW_AGE_DAYS } from '../../store/timeCapsuleStore';
 
 interface Props {
   onClose: () => void;
@@ -33,6 +34,8 @@ export function SessionBrowser({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const capsule = useTimeCapsuleStore();
+  const [capsuleConsistency, setCapsuleConsistency] = useState<string | null>(null);
 
   const refresh = useCallback(async (query: string) => {
     setLoading(true);
@@ -127,6 +130,53 @@ export function SessionBrowser({ onClose }: Props) {
             过往 <span className="text-amber-300">辩论档案</span>
           </h2>
         </div>
+
+        {/* Time capsule banner — surfaces unreviewed sessions ≥ N days old */}
+        {(() => {
+          const eligible = items
+            .filter((s) => {
+              const age = ageInDays(s.created_at);
+              return age >= REVIEW_AGE_DAYS && !capsule.isReviewed(s.session_id) && !capsule.isSnoozed(s.session_id);
+            })
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          if (eligible.length === 0) return null;
+          const oldest = eligible[0];
+          return (
+            <div className="mb-3 rounded-lg border border-purple-400/35 bg-purple-400/[0.05] px-3 py-2.5 flex items-center gap-3">
+              <span className="text-[14px]">🕰</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-mono text-purple-400/95 uppercase tracking-wider mb-0.5">
+                  时光胶囊 · {eligible.length} 个 session 等你复习
+                </p>
+                <p className="text-[12px] text-deep-50 leading-snug truncate">
+                  「{oldest.seed_hypothesis}」 — {ageInDays(oldest.created_at)} 天前
+                </p>
+              </div>
+              <button
+                onClick={() => setCapsuleConsistency(oldest.session_id)}
+                className="text-[10px] font-mono uppercase tracking-wider px-2.5 py-1 rounded border border-purple-400/55 bg-purple-400/[0.10] text-purple-200 hover:bg-purple-400/[0.18] shrink-0"
+              >
+                ⏱ 现在重测
+              </button>
+              <button
+                onClick={() => capsule.snooze(oldest.session_id)}
+                className="text-[10px] font-mono text-deep-200/65 hover:text-amber-300 px-2 py-1 rounded border border-deep-400/30 hover:border-amber-300/35 shrink-0"
+                title="30 天内不再提示这条"
+              >
+                ⌧ 缓 30 天
+              </button>
+            </div>
+          );
+        })()}
+        {capsuleConsistency && (
+          <ConsistencyTestModal
+            sessionId={capsuleConsistency}
+            onClose={() => {
+              capsule.markReviewed(capsuleConsistency);
+              setCapsuleConsistency(null);
+            }}
+          />
+        )}
 
         {/* Stats bar */}
         {stats && (

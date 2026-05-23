@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { usePersonaPromptStore, type PersonaDefault } from '../../store/personaPromptStore';
+import { autoLoopApi, type PromptABResponse } from '../../services/api';
 
 interface Props {
   onClose: () => void;
@@ -68,6 +69,8 @@ export function PersonaPromptEditor({ onClose }: Props) {
 
   const isDirty = active ? draftText.trim() !== (edits[active.id] ?? active.system_prompt).trim() : false;
   const isEdited = active ? !!edits[active.id] : false;
+  // A/B test state
+  const [abOpen, setAbOpen] = useState(false);
 
   return (
     <div
@@ -175,6 +178,14 @@ export function PersonaPromptEditor({ onClose }: Props) {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => setAbOpen(true)}
+                      disabled={draftText.trim() === active.system_prompt.trim()}
+                      className="text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-purple-400/45 text-purple-200 hover:bg-purple-400/[0.08] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="跟内置 prompt 对照跑同一议题，让 LLM 打分"
+                    >
+                      🆚 A/B 测试
+                    </button>
+                    <button
                       onClick={handleReset}
                       className="text-[11px] font-mono text-deep-200/75 hover:text-amber-300 px-3 py-1.5 rounded border border-deep-400/40 hover:border-amber-300/45 transition-colors"
                       title="恢复为内置 prompt 并清除自定义"
@@ -202,6 +213,201 @@ export function PersonaPromptEditor({ onClose }: Props) {
             )}
           </div>
         )}
+      </div>
+
+      {abOpen && active && (
+        <PromptABModal
+          personaId={active.id}
+          personaName={active.name}
+          promptA={active.system_prompt}
+          promptB={draftText}
+          onClose={() => setAbOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ──── A/B test modal ──── */
+
+function PromptABModal({
+  personaId, personaName, promptA, promptB, onClose,
+}: {
+  personaId: string; personaName: string;
+  promptA: string; promptB: string;
+  onClose: () => void;
+}) {
+  const [question, setQuestion] = useState('');
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<PromptABResponse | null>(null);
+
+  const run = async () => {
+    if (!question.trim()) return;
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    try {
+      const r = await autoLoopApi.abTestPrompt({
+        persona_id: personaId,
+        question: question.trim(),
+        prompt_a: promptA,
+        prompt_b: promptB,
+      });
+      setResult(r);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const winner = result?.comparison?.winner;
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-deep-950/90 backdrop-blur-sm flex items-center justify-center px-6 py-8 animate-fade-in"
+      role="dialog" aria-modal="true" onClick={onClose}
+    >
+      <div
+        className="relative max-w-5xl w-full glass border border-purple-400/35 rounded-xl p-6 shadow-glow-lg max-h-[88vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-deep-200/55 hover:text-amber-300 text-lg font-mono px-2"
+        >
+          ✕
+        </button>
+
+        <div className="mb-3">
+          <div className="inline-flex items-center gap-2 text-[10px] font-mono text-purple-400/95 tracking-[0.22em] uppercase mb-2 px-3 py-1.5 border border-purple-400/45 rounded-full">
+            <span>🆚</span>
+            Prompt A/B 测试
+          </div>
+          <h2 className="text-lg font-light text-white">
+            <span className="text-amber-300">{personaName}</span> · 内置 prompt vs 你的编辑版
+          </h2>
+        </div>
+
+        <div className="mb-3">
+          <label className="block text-[10px] font-mono text-amber-300/85 uppercase tracking-wider mb-1.5">
+            测试问题
+          </label>
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="输入一个具体的哲学议题…（例如：自由意志是否存在？）"
+            rows={2}
+            className="w-full bg-deep-800/40 border border-deep-400/40 rounded px-3 py-2 text-[12px] text-deep-50 placeholder-deep-300/50 resize-none focus:border-purple-400/55"
+            maxLength={400}
+          />
+        </div>
+
+        {error && (
+          <div className="text-[12px] text-earth-rust/90 bg-earth-rust/10 border border-earth-rust/30 rounded px-3 py-2 mb-3">
+            {error}
+          </div>
+        )}
+
+        {result && (
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
+            {result.comparison && (
+              <div className="rounded-lg border border-purple-400/35 bg-purple-400/[0.05] p-3">
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-[10px] font-mono text-purple-400/85 uppercase tracking-wider">
+                    判定
+                  </span>
+                  <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                    winner === 'A' ? 'border-amber-300/55 text-amber-200 bg-amber-300/[0.10]'
+                    : winner === 'B' ? 'border-earth-green/55 text-earth-green/95 bg-earth-green/[0.10]'
+                    : 'border-deep-400/40 text-deep-200/75'
+                  }`}>
+                    {winner === 'A' ? 'A 内置版胜' : winner === 'B' ? 'B 你的编辑胜' : '势均力敌'}
+                  </span>
+                </div>
+                <p className="text-[12px] text-deep-50 leading-snug italic">
+                  {result.comparison.reason}
+                </p>
+                {result.comparison.scores && (
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="text-[10px] font-mono w-full">
+                      <thead>
+                        <tr className="text-deep-300/70 border-b border-deep-400/20">
+                          <th className="text-left py-0.5 px-2 font-normal">维度</th>
+                          <th className="text-right py-0.5 px-2 font-normal">A 内置</th>
+                          <th className="text-right py-0.5 px-2 font-normal">B 编辑</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(['depth', 'clarity', 'specificity', 'philosophical_integrity', 'falsifiability'] as const).map((k) => {
+                          const a = result.comparison!.scores!.a[k];
+                          const b = result.comparison!.scores!.b[k];
+                          const better = a === b ? 'tie' : a > b ? 'a' : 'b';
+                          const label = { depth: '深度', clarity: '清晰', specificity: '具体', philosophical_integrity: '哲学完整', falsifiability: '可证伪' }[k];
+                          return (
+                            <tr key={k} className="border-b border-deep-400/10">
+                              <td className="py-0.5 px-2 text-deep-50">{label}</td>
+                              <td className={`text-right py-0.5 px-2 tabular-nums ${better === 'a' ? 'text-amber-300/95 font-semibold' : 'text-deep-100/75'}`}>{a}/5</td>
+                              <td className={`text-right py-0.5 px-2 tabular-nums ${better === 'b' ? 'text-earth-green/95 font-semibold' : 'text-deep-100/75'}`}>{b}/5</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded border border-amber-300/30 bg-amber-300/[0.03] p-2.5">
+                <p className="text-[10px] font-mono text-amber-300/85 uppercase tracking-wider mb-1 flex items-center gap-2">
+                  <span>A · 内置 prompt</span>
+                  <span className="text-deep-300/65 tabular-nums">{Math.round(result.a.latency_ms)}ms</span>
+                </p>
+                {result.a.error ? (
+                  <p className="text-[11px] text-earth-rust/85 italic">{result.a.error}</p>
+                ) : (
+                  <p className="text-[12px] text-deep-50 leading-snug whitespace-pre-wrap">{result.a.content}</p>
+                )}
+              </div>
+              <div className="rounded border border-earth-green/35 bg-earth-green/[0.03] p-2.5">
+                <p className="text-[10px] font-mono text-earth-green/85 uppercase tracking-wider mb-1 flex items-center gap-2">
+                  <span>B · 你的编辑</span>
+                  <span className="text-deep-300/65 tabular-nums">{Math.round(result.b.latency_ms)}ms</span>
+                </p>
+                {result.b.error ? (
+                  <p className="text-[11px] text-earth-rust/85 italic">{result.b.error}</p>
+                ) : (
+                  <p className="text-[12px] text-deep-50 leading-snug whitespace-pre-wrap">{result.b.content}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 mt-3">
+          <span className="text-[10px] font-mono text-deep-300/65 tabular-nums mr-auto">
+            {question.length} / 400
+          </span>
+          <button
+            onClick={onClose}
+            className="text-[11px] font-mono text-deep-200/75 hover:text-amber-300 px-3 py-1.5 rounded border border-deep-400/40 hover:border-amber-300/45"
+          >
+            关闭
+          </button>
+          <button
+            onClick={run}
+            disabled={!question.trim() || running}
+            className={`text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 rounded border transition-colors ${
+              !question.trim() || running
+                ? 'border-deep-400/30 text-deep-200/40 cursor-not-allowed'
+                : 'border-purple-400/55 bg-purple-400/[0.08] text-purple-200 hover:bg-purple-400/[0.14]'
+            }`}
+          >
+            {running ? '运行中…' : (result ? '↻ 再跑' : '▶ 开始 A/B')}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -749,6 +749,7 @@ export interface AutoLoopConfig {
   cross_lingual?: boolean;
   live_critic?: boolean;
   fact_check?: boolean;
+  future_perspective?: boolean;
   persona_overrides?: Record<string, string>;
 }
 
@@ -761,6 +762,27 @@ export interface FactCheckClaim {
   claim: string;
   verdict: 'certain' | 'uncertain' | 'likely_wrong' | 'unverifiable';
   reason: string;
+}
+
+export interface PromptABScores {
+  depth: number;
+  clarity: number;
+  specificity: number;
+  philosophical_integrity: number;
+  falsifiability: number;
+}
+
+export interface PromptABResponse {
+  persona_id: string;
+  question: string;
+  model_spec: string;
+  a: { label: string; content: string; latency_ms: number; error: string | null };
+  b: { label: string; content: string; latency_ms: number; error: string | null };
+  comparison: {
+    winner: 'A' | 'B' | 'tie';
+    reason: string;
+    scores: { a: PromptABScores; b: PromptABScores } | null;
+  } | null;
 }
 
 export interface PersonaFollowupResponse {
@@ -959,6 +981,19 @@ export const autoLoopApi = {
     model_spec?: string;
   }) =>
     request<PersonaFollowupResponse>(`/orchestrator/persona/followup`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** A/B test two persona system-prompt versions on the same question. */
+  abTestPrompt: (body: {
+    persona_id: string;
+    question: string;
+    prompt_a: string;
+    prompt_b: string;
+    model_spec?: string;
+  }) =>
+    request<PromptABResponse>(`/orchestrator/persona/ab_test`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

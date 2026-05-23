@@ -77,6 +77,7 @@ class AutoLoopRequest(BaseModel):
     cross_lingual: bool = False          # per-persona "think in native tradition" directive
     live_critic: bool = False            # cheap-tier critic flags logic issues after every persona statement
     fact_check: bool = False             # plausibility check on empirical claims after each persona
+    future_perspective: bool = False     # each persona is its 2050 self looking back at 2026
     # User-customized persona system prompts. Map persona_id → full prompt text.
     # Missing keys fall back to the built-in defaults.
     persona_overrides: dict[str, str] | None = None
@@ -124,6 +125,7 @@ async def run_auto_loop(req: AutoLoopRequest):
         cross_lingual=req.cross_lingual,
         live_critic=req.live_critic,
         fact_check=req.fact_check,
+        future_perspective=req.future_perspective,
     )
     # Background task drains generator into the bus; survives HTTP disconnect.
     # `archive_auto_loop` persists the full session to SQLite on completion.
@@ -492,6 +494,136 @@ async def find_analogies(body: dict):
             "key_difference": str(a.get("key_difference", ""))[:200],
         })
     return {"analogies": out}
+
+
+AB_COMPARE_SYSTEM = (
+    "你是一位 prompt 工程评估员。两段文本是同一个 persona 用**两个不同 system "
+    "prompt 版本** (A 和 B) 回答**同一个问题**的结果。你的任务是评估哪个 prompt "
+    "版本产出更高质量的哲学论证。\n\n"
+    "评分维度（每个 1-5 分）：\n"
+    "- depth：论证深度，是否深入到核心机制\n"
+    "- clarity：表达清晰度，论证结构是否易于追踪\n"
+    "- specificity：具体性，是否提供具体例子和细节而非泛泛\n"
+    "- philosophical_integrity：哲学完整性，是否真正运用 persona 的传统而非套话\n"
+    "- falsifiability：是否给出可证伪线 / 反方论证 / 让步\n\n"
+    "判定整体胜方：\"A\" / \"B\" / \"tie\"\n\n"
+    "严格输出 JSON：\n"
+    "{\n"
+    "  \"winner\": \"A|B|tie\",\n"
+    "  \"reason\": \"≤ 80 字：A 比 B 强 / 弱在哪里\",\n"
+    "  \"scores\": {\n"
+    "    \"a\": {\"depth\": 1-5, \"clarity\": 1-5, \"specificity\": 1-5, \"philosophical_integrity\": 1-5, \"falsifiability\": 1-5},\n"
+    "    \"b\": {\"depth\": 1-5, \"clarity\": 1-5, \"specificity\": 1-5, \"philosophical_integrity\": 1-5, \"falsifiability\": 1-5}\n"
+    "  }\n"
+    "}\n"
+    "只输出 JSON。"
+)
+
+
+@router.post("/persona/ab_test")
+async def ab_test_persona_prompt(body: dict):
+    """A/B test two persona prompt versions against the same question.
+
+    Runs both prompts in parallel through the same model, then a strong-tier
+    comparator scores them on 5 dimensions and picks an overall winner.
+
+    Body: {persona_id, question, prompt_a, prompt_b, model_spec?}
+    """
+    import asyncio as _asyncio
+    import json as _json
+    import re as _re
+    import time as _time
+
+    from app.core.inference import get_strong_backend, get_backend_from_spec
+    from app.services.auto_loop import (
+        PHILOSOPHICAL_PERSONAS, ADVERSARIAL_SYSTEM_PROMPT,
+        FALSIFIABILITY_DIRECTIVE_ZH,
+    )
+
+    persona_id = (body.get("persona_id") or "").strip()
+    question = (body.get("question") or "").strip()
+    prompt_a = (body.get("prompt_a") or "").strip()
+    prompt_b = (body.get("prompt_b") or "").strip()
+    model_spec = (body.get("model_spec") or "claude:claude-sonnet-4-6").strip()
+
+    if not persona_id or not question or not prompt_a or not prompt_b:
+        raise HTTPException(400, "persona_id, question, prompt_a, prompt_b all required")
+    if prompt_a == prompt_b:
+        raise HTTPException(400, "prompt_a and prompt_b are identical — pick a real comparison")
+
+    user_prompt = (
+        f"问题：{question}\n\n"
+        f"请从你的哲学立场出发，对这个问题给出你的分析和立场。"
+        f"{FALSIFIABILITY_DIRECTIVE_ZH}"
+    )
+
+    async def _run_variant(system_prompt: str, label: str) -> dict:
+        t0 = _time.perf_counter()
+        try:
+            backend = get_backend_from_spec(model_spec, _auto_loop.tracker, tier="persona")
+            content = await backend.complete(
+                system_prompt=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+                max_tokens=900, temperature=0.7,
+            )
+            return {
+                "label": label,
+                "content": content,
+                "latency_ms": round((_time.perf_counter() - t0) * 1000, 1),
+                "error": None,
+            }
+        except Exception as e:
+            return {
+                "label": label,
+                "content": "",
+                "latency_ms": round((_time.perf_counter() - t0) * 1000, 1),
+                "error": f"{type(e).__name__}: {str(e)[:200]}",
+            }
+
+    a_result, b_result = await _asyncio.gather(
+        _run_variant(prompt_a, "A"),
+        _run_variant(prompt_b, "B"),
+    )
+
+    # Comparator only runs if both variants produced content
+    comparison: dict | None = None
+    if not a_result["error"] and not b_result["error"]:
+        try:
+            comparator = get_strong_backend(_auto_loop.tracker)
+            persona_name = next(
+                (p["name"] for p in PHILOSOPHICAL_PERSONAS if p["id"] == persona_id),
+                persona_id,
+            )
+            compare_user = (
+                f"问题：{question}\n\n"
+                f"Persona: {persona_name} ({persona_id})\n\n"
+                f"=== Prompt A ===\n{prompt_a[:600]}\n\n"
+                f"--- A 的回答 ---\n{a_result['content']}\n\n"
+                f"=== Prompt B ===\n{prompt_b[:600]}\n\n"
+                f"--- B 的回答 ---\n{b_result['content']}\n\n"
+                f"请按 schema 输出 JSON 评估。"
+            )
+            raw = await comparator.complete(
+                system_prompt=AB_COMPARE_SYSTEM,
+                messages=[{"role": "user", "content": compare_user}],
+                max_tokens=800, temperature=0.2,
+            )
+            raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+            raw = _re.sub(r"```\s*$", "", raw)
+            m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+            if m:
+                comparison = _json.loads(m.group(0))
+        except Exception as e:
+            comparison = {"winner": "tie", "reason": f"comparator failed: {type(e).__name__}", "scores": None}
+
+    return {
+        "persona_id": persona_id,
+        "question": question,
+        "model_spec": model_spec,
+        "a": a_result,
+        "b": b_result,
+        "comparison": comparison,
+    }
 
 
 @router.post("/persona/followup")

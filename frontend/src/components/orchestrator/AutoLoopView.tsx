@@ -82,6 +82,7 @@ export function AutoLoopView() {
   const [crossLingualEnabled, setCrossLingualEnabled] = useState(false);
   const [liveCriticEnabled, setLiveCriticEnabled] = useState(false);
   const [factCheckEnabled, setFactCheckEnabled] = useState(false);
+  const [futurePerspectiveEnabled, setFuturePerspectiveEnabled] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const editedPersonaIds = usePersonaPromptStore((s) => s.editedIds);
   const overridePayload = usePersonaPromptStore((s) => s.overridePayload);
@@ -151,6 +152,7 @@ export function AutoLoopView() {
       cross_lingual: configMode === 'philosophical' ? crossLingualEnabled : false,
       live_critic: configMode === 'philosophical' ? liveCriticEnabled : false,
       fact_check: configMode === 'philosophical' ? factCheckEnabled : false,
+      future_perspective: configMode === 'philosophical' ? futurePerspectiveEnabled : false,
     } as AutoLoopConfig & { flip_stance?: boolean };
     // Include persona overrides (only applies in philosophical mode where personas matter).
     if (configMode === 'philosophical') {
@@ -771,6 +773,13 @@ export function AutoLoopView() {
                       enabled={factCheckEnabled}
                       onToggle={setFactCheckEnabled}
                       color="red"
+                    />
+                    <FeatureToggle
+                      label="⏳ 未来人辩论"
+                      description="每位 persona 假装是 2050 年的版本，从未来回望此问题，指出当下盲点"
+                      enabled={futurePerspectiveEnabled}
+                      onToggle={setFuturePerspectiveEnabled}
+                      color="purple"
                     />
                   </div>
                 </div>

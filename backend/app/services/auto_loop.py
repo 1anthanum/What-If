@@ -304,6 +304,21 @@ FACT_CHECK_SYSTEM_PROMPT = (
 )
 
 
+FUTURE_PERSPECTIVE_DIRECTIVE_ZH = (
+    "（视角提示：你是来自 2050 年的版本。从未来回望当下这个问题时，"
+    "请合理假定一些 2026-2050 之间发生但当下未发生的关键事件 / 技术 / 危机，"
+    "并指出当下讨论中明显的盲点 —— 2050 年的人会觉得 2026 年的人忽视了什么？"
+    "保持你的哲学传统不变，只是把时间锚点前推。）\n\n"
+)
+FUTURE_PERSPECTIVE_DIRECTIVE_EN = (
+    "(Perspective cue: you are your 2050 self. Looking back at this question "
+    "from the future, plausibly assume some key events / technologies / "
+    "crises that occurred between 2026 and 2050 but haven't yet, and surface "
+    "the blind spots a 2050 thinker would notice the 2026 conversation missed. "
+    "Keep your philosophical tradition the same; only shift the temporal anchor.)\n\n"
+)
+
+
 CRITIC_SYSTEM_PROMPT = (
     "你是一位严苛但建设性的论证审稿人。读完一个 persona 在哲学辩论中的发言后，"
     "找出**最多 3 条**具体的论证问题。要点：\n"
@@ -462,6 +477,7 @@ class AutoLoopScheduler:
         cross_lingual: bool = False,
         live_critic: bool = False,
         fact_check: bool = False,
+        future_perspective: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """Outer wrapper: tee every SSE event to a per-session JSONL log
         for offline analysis / report export. Inner generator does the work.
@@ -495,6 +511,7 @@ class AutoLoopScheduler:
             cross_lingual=cross_lingual,
             live_critic=live_critic,
             fact_check=fact_check,
+            future_perspective=future_perspective,
         )
         # Buffer first event to learn session_id, then start writing log
         first_ev = None
@@ -545,6 +562,7 @@ class AutoLoopScheduler:
         cross_lingual: bool = False,
         live_critic: bool = False,
         fact_check: bool = False,
+        future_perspective: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """Run autonomous exploration cycles.
 
@@ -574,6 +592,7 @@ class AutoLoopScheduler:
         self._cross_lingual = bool(cross_lingual)
         self._live_critic = bool(live_critic)
         self._fact_check_enabled = bool(fact_check)
+        self._future_perspective = bool(future_perspective)
 
         if not session_id:
             session_id = str(uuid.uuid4())[:8]
@@ -976,8 +995,11 @@ class AutoLoopScheduler:
                 cl_directive_en = CROSS_LINGUAL_DIRECTIVES_EN.get(persona["id"], "")
             else:
                 cl_directive_zh = cl_directive_en = ""
+            future_zh = FUTURE_PERSPECTIVE_DIRECTIVE_ZH if getattr(self, "_future_perspective", False) else ""
+            future_en = FUTURE_PERSPECTIVE_DIRECTIVE_EN if getattr(self, "_future_perspective", False) else ""
             if _lang == "en":
                 user_prompt = (
+                    f"{future_en}"
                     f"{cl_directive_en}"
                     f"{history_context}"
                     f"Question: {question}\n\n"
@@ -990,6 +1012,7 @@ class AutoLoopScheduler:
                 )
             else:
                 user_prompt = (
+                    f"{future_zh}"
                     f"{cl_directive_zh}"
                     f"{history_context}"
                     f"当前问题：{question}\n\n"
