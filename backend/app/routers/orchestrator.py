@@ -78,6 +78,8 @@ class AutoLoopRequest(BaseModel):
     live_critic: bool = False            # cheap-tier critic flags logic issues after every persona statement
     fact_check: bool = False             # plausibility check on empirical claims after each persona
     future_perspective: bool = False     # each persona is its 2050 self looking back at 2026
+    dialectical_mode: bool = False       # Hegelian thesis/antithesis/synthesis with only 3 personas
+    belief_tracking: bool = False        # each persona ends with P(my position) = X.XX for Bayesian charting
     # User-customized persona system prompts. Map persona_id → full prompt text.
     # Missing keys fall back to the built-in defaults.
     persona_overrides: dict[str, str] | None = None
@@ -126,6 +128,8 @@ async def run_auto_loop(req: AutoLoopRequest):
         live_critic=req.live_critic,
         fact_check=req.fact_check,
         future_perspective=req.future_perspective,
+        dialectical_mode=req.dialectical_mode,
+        belief_tracking=req.belief_tracking,
     )
     # Background task drains generator into the bus; survives HTTP disconnect.
     # `archive_auto_loop` persists the full session to SQLite on completion.

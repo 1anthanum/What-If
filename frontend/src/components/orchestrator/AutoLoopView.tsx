@@ -86,6 +86,8 @@ export function AutoLoopView() {
   const [liveCriticEnabled, setLiveCriticEnabled] = useState(false);
   const [factCheckEnabled, setFactCheckEnabled] = useState(false);
   const [futurePerspectiveEnabled, setFuturePerspectiveEnabled] = useState(false);
+  const [dialecticalEnabled, setDialecticalEnabled] = useState(false);
+  const [beliefTrackingEnabled, setBeliefTrackingEnabled] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const editedPersonaIds = usePersonaPromptStore((s) => s.editedIds);
   const overridePayload = usePersonaPromptStore((s) => s.overridePayload);
@@ -166,6 +168,8 @@ export function AutoLoopView() {
       live_critic: configMode === 'philosophical' ? liveCriticEnabled : false,
       fact_check: configMode === 'philosophical' ? factCheckEnabled : false,
       future_perspective: configMode === 'philosophical' ? futurePerspectiveEnabled : false,
+      dialectical_mode:   configMode === 'philosophical' ? dialecticalEnabled : false,
+      belief_tracking:    configMode === 'philosophical' ? beliefTrackingEnabled : false,
     } as AutoLoopConfig & { flip_stance?: boolean };
     // Include persona overrides (only applies in philosophical mode where personas matter).
     if (configMode === 'philosophical') {
@@ -870,6 +874,20 @@ export function AutoLoopView() {
                       onToggle={setFuturePerspectiveEnabled}
                       color="purple"
                     />
+                    <FeatureToggle
+                      label="🌀 黑格尔辩证"
+                      description="3 个 persona 分别担任正题 / 反题 / 合题 — 强制矛盾推进与更高层综合，而非平行陈述"
+                      enabled={dialecticalEnabled}
+                      onToggle={setDialecticalEnabled}
+                      color="purple"
+                    />
+                    <FeatureToggle
+                      label="📈 贝叶斯信念"
+                      description="每位 persona 在结尾给出 P(本立场为真)，跨 cycle 画出立场信念演化曲线"
+                      enabled={beliefTrackingEnabled}
+                      onToggle={setBeliefTrackingEnabled}
+                      color="blue"
+                    />
                   </div>
                 </div>
               )}
@@ -1287,6 +1305,18 @@ function splitFalsifiability(content: string): { body: string; falsifiability: s
   return { body, falsifiability: m[1].trim() };
 }
 
+/** Extract the Bayesian belief P-value if the persona was asked to provide one.
+ *  Matches both "当下信念：P(...) = 0.72" and "Current belief: P(...) = 0.72". */
+function extractBelief(content: string): { body: string; belief: number | null } {
+  const re = /(?:^|\n)\s*\**\s*(?:当下信念|Current belief)\s*[:：][^\n]*?(?:=|＝)\s*(0?\.\d+|1(?:\.0+)?|0|1)/i;
+  const m = content.match(re);
+  if (!m) return { body: content, belief: null };
+  const val = parseFloat(m[1]);
+  if (isNaN(val) || val < 0 || val > 1) return { body: content, belief: null };
+  const body = content.slice(0, m.index ?? content.length).replace(/\s+$/, '');
+  return { body, belief: val };
+}
+
 /** Detect the self-contradiction test sections ("反方最强论证" + "我仍坚持原立场").
  *  Returns the cleaned body + the two extracted paragraphs (or null if absent).
  *  Run AFTER splitFalsifiability so the falsifiability line doesn't bleed in. */
@@ -1325,9 +1355,11 @@ function PersonaCard({
   const [followupOpen, setFollowupOpen] = useState(false);
   const colorClass = PERSONA_COLORS[persona.id] ?? 'text-deep-200/50 border-deep-400/45 bg-deep-600/5';
   const icon = PERSONA_ICONS[persona.id] ?? '◇';
-  // Strip falsifiability line first, then peel off optional self-contradiction
-  // sections; the remaining `body` is the persona's primary statement.
-  const afterFals = splitFalsifiability(persona.content);
+  // Strip in order: belief → falsifiability → self-contradiction.
+  // The remaining `body` is the persona's primary statement.
+  const afterBelief = extractBelief(persona.content);
+  const belief = afterBelief.belief;
+  const afterFals = splitFalsifiability(afterBelief.body);
   const falsifiability = afterFals.falsifiability;
   const sc = splitSelfContradiction(afterFals.body);
   const body = sc.body;
@@ -1357,6 +1389,18 @@ function PersonaCard({
             title="你开始前的预测立场"
           >
             🎯 你猜：{predLabel}
+          </span>
+        )}
+        {belief !== null && (
+          <span
+            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border tabular-nums ${
+              belief >= 0.7 ? 'border-earth-green/55 bg-earth-green/[0.10] text-earth-green/95'
+              : belief >= 0.4 ? 'border-amber-300/55 bg-amber-300/[0.10] text-amber-200'
+              : 'border-earth-rust/55 bg-earth-rust/[0.10] text-earth-rust'
+            }`}
+            title={`该 persona 对自己立场的信念概率：P=${belief.toFixed(2)}`}
+          >
+            P={belief.toFixed(2)}
           </span>
         )}
         {falsifiability && (

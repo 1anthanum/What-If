@@ -750,6 +750,8 @@ export interface AutoLoopConfig {
   live_critic?: boolean;
   fact_check?: boolean;
   future_perspective?: boolean;
+  dialectical_mode?: boolean;
+  belief_tracking?: boolean;
   persona_overrides?: Record<string, string>;
 }
 

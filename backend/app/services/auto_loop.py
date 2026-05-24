@@ -304,12 +304,75 @@ FACT_CHECK_SYSTEM_PROMPT = (
 )
 
 
+BELIEF_TRACK_DIRECTIVE_ZH = (
+    "\n\n**信念校准**：在结尾另起一行，写：\n"
+    "「当下信念：P(本立场为真) = X.XX」（X.XX 是 0 到 1 之间的浮点数；"
+    "0=完全不信，0.5=均势，1=完全确信）。这是你对**自己刚刚论证的立场**"
+    "在当下的概率估计 —— 不要装假笃信。"
+)
+BELIEF_TRACK_DIRECTIVE_EN = (
+    "\n\n**Belief calibration**: end with a separate line:\n"
+    "\"Current belief: P(my position is true) = X.XX\" (a float in [0,1]: "
+    "0=disbelieve, 0.5=undecided, 1=certain). Be honest, not performatively confident."
+)
+
+
 FUTURE_PERSPECTIVE_DIRECTIVE_ZH = (
     "（视角提示：你是来自 2050 年的版本。从未来回望当下这个问题时，"
     "请合理假定一些 2026-2050 之间发生但当下未发生的关键事件 / 技术 / 危机，"
     "并指出当下讨论中明显的盲点 —— 2050 年的人会觉得 2026 年的人忽视了什么？"
     "保持你的哲学传统不变，只是把时间锚点前推。）\n\n"
 )
+DIALECTICAL_ROLES_ZH = {
+    0: (
+        "\n\n**辩证模式 · 你的角色：正题（Thesis）**\n"
+        "本轮请构造**最强支持立场**。请：\n"
+        "1. 明确陈述你支持的核心命题\n"
+        "2. 给出 2-3 个最强的论证理由\n"
+        "3. 不要先发制人地考虑反方 —— 这是反题的角色\n"
+        "4. 目标：建立一个反方必须正面应对的坚固阵地\n"
+    ),
+    1: (
+        "\n\n**辩证模式 · 你的角色：反题（Antithesis）**\n"
+        "正题刚刚提出了某个立场。请构造**最强反对论证**：\n"
+        "1. 不要稻草人化 —— 攻击正题的最强版本，不是最弱版本\n"
+        "2. 给出 2-3 个最锐利的反方理由 / 反例 / 概念区分\n"
+        "3. 揭示正题隐含但未声明的前提\n"
+        "4. 目标：把矛盾推到正反双方都无法忽视的程度\n"
+    ),
+    2: (
+        "\n\n**辩证模式 · 你的角色：合题（Synthesis）**\n"
+        "正反两方已各自给出最强论证。请构造**更高层次的综合**：\n"
+        "1. **不是中庸调和**（「双方都有道理」是错答案）\n"
+        "2. 找出正反矛盾背后的**共同未声明前提** —— 这往往是真问题所在\n"
+        "3. 提出一个**第三层视角**：保留正反双方各自的真理时刻 + "
+        "指出他们共同的盲区\n"
+        "4. 目标：让原命题的讨论上一个抽象层级\n"
+    ),
+}
+DIALECTICAL_ROLES_EN = {
+    0: (
+        "\n\n**Dialectical mode · Your role: Thesis**\n"
+        "Construct the strongest case FOR the position. State your core claim, "
+        "give 2-3 strongest reasons, do NOT preempt counterarguments "
+        "(that's the antithesis's job). Build a fortress the antithesis must storm.\n"
+    ),
+    1: (
+        "\n\n**Dialectical mode · Your role: Antithesis**\n"
+        "The thesis just stated a position. Construct the strongest case AGAINST. "
+        "Attack the strongest version (no strawmen). Surface the thesis's "
+        "unstated premises. Push the contradiction until neither side can ignore it.\n"
+    ),
+    2: (
+        "\n\n**Dialectical mode · Your role: Synthesis**\n"
+        "Construct a *higher-order* synthesis (NOT bland 'both sides have a point'). "
+        "Find the shared unstated premise both T and A assume — that's usually the "
+        "real problem. Propose a third-level view that preserves each side's moment "
+        "of truth while exposing their shared blind spot.\n"
+    ),
+}
+
+
 FUTURE_PERSPECTIVE_DIRECTIVE_EN = (
     "(Perspective cue: you are your 2050 self. Looking back at this question "
     "from the future, plausibly assume some key events / technologies / "
@@ -478,6 +541,8 @@ class AutoLoopScheduler:
         live_critic: bool = False,
         fact_check: bool = False,
         future_perspective: bool = False,
+        dialectical_mode: bool = False,
+        belief_tracking: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """Outer wrapper: tee every SSE event to a per-session JSONL log
         for offline analysis / report export. Inner generator does the work.
@@ -512,6 +577,8 @@ class AutoLoopScheduler:
             live_critic=live_critic,
             fact_check=fact_check,
             future_perspective=future_perspective,
+            dialectical_mode=dialectical_mode,
+            belief_tracking=belief_tracking,
         )
         # Buffer first event to learn session_id, then start writing log
         first_ev = None
@@ -563,6 +630,8 @@ class AutoLoopScheduler:
         live_critic: bool = False,
         fact_check: bool = False,
         future_perspective: bool = False,
+        dialectical_mode: bool = False,
+        belief_tracking: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """Run autonomous exploration cycles.
 
@@ -593,6 +662,8 @@ class AutoLoopScheduler:
         self._live_critic = bool(live_critic)
         self._fact_check_enabled = bool(fact_check)
         self._future_perspective = bool(future_perspective)
+        self._dialectical_mode = bool(dialectical_mode)
+        self._belief_tracking = bool(belief_tracking)
 
         if not session_id:
             session_id = str(uuid.uuid4())[:8]
@@ -954,6 +1025,10 @@ class AutoLoopScheduler:
         # Honor Y5 negative-control shuffle if active for this run.
         active = getattr(self, "_active_personas", None) or PHILOSOPHICAL_PERSONAS
         personas_to_run = active[:4] if adversarial else active
+        # Dialectical mode collapses to exactly 3 personas — thesis /
+        # antithesis / synthesis. We pick the first 3 of the active set.
+        if getattr(self, "_dialectical_mode", False):
+            personas_to_run = personas_to_run[:3]
 
         for idx, persona in enumerate(personas_to_run):
             # Smart pairing: pick provider best-suited for this persona's
@@ -997,6 +1072,11 @@ class AutoLoopScheduler:
                 cl_directive_zh = cl_directive_en = ""
             future_zh = FUTURE_PERSPECTIVE_DIRECTIVE_ZH if getattr(self, "_future_perspective", False) else ""
             future_en = FUTURE_PERSPECTIVE_DIRECTIVE_EN if getattr(self, "_future_perspective", False) else ""
+            # Dialectical role assignment — only when flag is on and idx is one of 0/1/2.
+            dialectical_zh = DIALECTICAL_ROLES_ZH.get(idx, "") if getattr(self, "_dialectical_mode", False) else ""
+            dialectical_en = DIALECTICAL_ROLES_EN.get(idx, "") if getattr(self, "_dialectical_mode", False) else ""
+            belief_zh = BELIEF_TRACK_DIRECTIVE_ZH if getattr(self, "_belief_tracking", False) else ""
+            belief_en = BELIEF_TRACK_DIRECTIVE_EN if getattr(self, "_belief_tracking", False) else ""
             if _lang == "en":
                 user_prompt = (
                     f"{future_en}"
@@ -1006,8 +1086,10 @@ class AutoLoopScheduler:
                     f"From the philosophical stance of your tradition, give your analysis and position on this question. "
                     f"If you have fundamental disagreement with other traditions, name the point of disagreement explicitly. "
                     f"Respond in English throughout, regardless of the language used in the question."
+                    f"{dialectical_en}"
                     f"{flip_directive}"
                     f"{sc_directive_en}"
+                    f"{belief_en}"
                     f"{FALSIFIABILITY_DIRECTIVE_EN}"
                 )
             else:
@@ -1018,8 +1100,10 @@ class AutoLoopScheduler:
                     f"当前问题：{question}\n\n"
                     f"请从你的哲学立场出发，对这个问题给出你的分析和立场。"
                     f"如果你与其他思想流派存在根本分歧，请明确指出分歧所在。"
+                    f"{dialectical_zh}"
                     f"{flip_directive}"
                     f"{sc_directive_zh}"
+                    f"{belief_zh}"
                     f"{FALSIFIABILITY_DIRECTIVE_ZH}"
                 )
 
