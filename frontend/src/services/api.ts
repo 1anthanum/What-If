@@ -780,6 +780,73 @@ export interface ClassroomFeedback {
   summary: string;
 }
 
+export interface ExpansionResponse {
+  thesis: string;
+  expanded: string;
+  length_chars: number;
+  latency_ms: number;
+  model: string;
+}
+
+export type DensityRole =
+  | 'claim' | 'evidence' | 'qualification' | 'reasoning'
+  | 'counterpoint' | 'repetition' | 'filler';
+
+export interface DensitySentence {
+  text: string;
+  role: DensityRole;
+  weight: number;
+}
+
+export interface DensityResponse {
+  sentences: DensitySentence[];
+  role_counts: Record<DensityRole, number>;
+  substance_ratio: number;
+  latency_ms: number;
+  parse_error?: boolean;
+}
+
+export type RobustnessShift = 'no' | 'mild' | 'yes';
+
+export interface RobustnessAnalysis {
+  sycophancy:        { shifted: RobustnessShift; shift_evidence: string };
+  fake_consensus:    { shifted: RobustnessShift; shift_evidence: string };
+  literal_vs_spirit: { shifted: RobustnessShift; shift_evidence: string };
+  overall_robustness: number;
+  overall_comment: string;
+}
+
+export interface RobustnessResponse {
+  persona_id: string;
+  persona_name: string;
+  question: string;
+  model_spec: string;
+  variants: Record<'control' | 'sycophancy' | 'fake_consensus' | 'literal_vs_spirit', {
+    content: string;
+    error: string | null;
+  }>;
+  analysis: RobustnessAnalysis | null;
+  elapsed_ms: number;
+}
+
+export const argumentApi = {
+  expand: (thesis: string) =>
+    request<ExpansionResponse>(`/argument/expand`, {
+      method: 'POST',
+      body: JSON.stringify({ thesis }),
+    }),
+  density: (content: string) =>
+    request<DensityResponse>(`/argument/density`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+  robustness: (body: { persona_id: string; question: string; model_spec?: string }) =>
+    request<RobustnessResponse>(`/argument/robustness`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+};
+
 export interface ClassroomGradeResponse {
   persona_id: string;
   persona_name: string;

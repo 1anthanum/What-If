@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
-from app.routers import debate, causal, counterfactual, orchestrator, debug, voting, metrics, sessions
+from app.routers import debate, causal, counterfactual, orchestrator, debug, voting, metrics, sessions, argument_lab
 
 settings = get_settings()
 
@@ -31,6 +31,7 @@ app.include_router(voting.router)
 app.include_router(debug.router)
 app.include_router(metrics.router)
 app.include_router(sessions.router)
+app.include_router(argument_lab.router)
 
 
 @app.get("/")
