@@ -145,6 +145,34 @@ export interface ConsistencyReport {
   results: ConsistencyResult[];
 }
 
+export type PropagationEdgeKind =
+  | 'cites' | 'extends' | 'refutes' | 'modifies' | 'ignores_despite_relevance';
+
+export interface PropagationArgument {
+  id: string;
+  cycle: number;
+  persona_id: string;
+  persona_name: string;
+  summary: string;
+}
+
+export interface PropagationEdge {
+  from: string;
+  to: string;
+  kind: PropagationEdgeKind;
+  note: string;
+}
+
+export interface PropagationReport {
+  session_id: string;
+  arguments: PropagationArgument[];
+  edges: PropagationEdge[];
+  key_threads: string[];
+  dead_ends: string[];
+  model?: string;
+  parse_error?: boolean;
+}
+
 export interface PersonalizedAdversary {
   user_fingerprint: string;
   blind_spots: string[];
@@ -186,6 +214,10 @@ export const sessionsApi = {
     }),
   consistencyTest: (sessionId: string) =>
     _fetch<ConsistencyReport>(`/sessions/${sessionId}/consistency_test`, {
+      method: 'POST',
+    }),
+  propagation: (sessionId: string) =>
+    _fetch<PropagationReport>(`/sessions/${sessionId}/propagation`, {
       method: 'POST',
     }),
   personalizedAdversary: (limit = 15) =>

@@ -17,6 +17,7 @@ import { ConceptEvolutionPanel } from './components/common/ConceptEvolutionPanel
 import { ClassroomPanel } from './components/common/ClassroomPanel';
 import { ArgumentLab } from './components/common/ArgumentLab';
 import { PremortemPanel } from './components/common/PremortemPanel';
+import { ThinkerDialoguePanel } from './components/common/ThinkerDialoguePanel';
 import { Button } from './components/common/ui';
 import { useDebateStore } from './store/debateStore';
 import { useCausalStore } from './store/causalStore';
@@ -48,6 +49,7 @@ export default function App() {
   const [classroomOpen, setClassroomOpen] = useState(false);
   const [labOpen, setLabOpen] = useState(false);
   const [premortemOpen, setPremortemOpen] = useState(false);
+  const [thinkerDialogueOpen, setThinkerDialogueOpen] = useState(false);
 
   // Determine which module's token usage to show
   const tokenUsage =
@@ -166,6 +168,13 @@ export default function App() {
             >
               🩺 Premortem
             </button>
+            <button
+              onClick={() => setThinkerDialogueOpen(true)}
+              className="text-[11px] font-mono uppercase tracking-[0.18em] text-deep-200/65 hover:text-amber-300 px-2.5 py-1.5 rounded border border-deep-400/20 hover:border-amber-300/35 transition-colors"
+              title="思想家对话：两位历史哲学家带各自文本对谈"
+            >
+              💬 对话
+            </button>
             <SettingsPanel />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-deep-800/60 border tk-border-faint">
               <span className="status-dot bg-electric" />
@@ -279,6 +288,9 @@ export default function App() {
 
       {/* Pre-mortem — failure-scenario writing for a personal decision */}
       {premortemOpen && <PremortemPanel onClose={() => setPremortemOpen(false)} />}
+
+      {/* Thinker dialogue — two historical philosophers in conversation */}
+      {thinkerDialogueOpen && <ThinkerDialoguePanel onClose={() => setThinkerDialogueOpen(false)} />}
 
       {/* Footer */}
       <DisclaimerFooter />

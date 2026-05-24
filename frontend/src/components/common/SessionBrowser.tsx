@@ -23,6 +23,7 @@ import {
 import { useTimeCapsuleStore, ageInDays, REVIEW_AGE_DAYS } from '../../store/timeCapsuleStore';
 import { useAutoLoopStore } from '../../store/autoLoopStore';
 import { useNavStore } from '../../store/navStore';
+import { PropagationView } from './PropagationView';
 
 interface Props {
   onClose: () => void;
@@ -454,6 +455,7 @@ function ConsistencyTestModal({ sessionId, onClose }: { sessionId: string; onClo
 
 function SessionDetailView({ detail, onCloseBrowser }: { detail: SessionDetail; onCloseBrowser: () => void }) {
   const [consistencyOpen, setConsistencyOpen] = useState(false);
+  const [propagationOpen, setPropagationOpen] = useState(false);
   const loadFromArchive = useAutoLoopStore((s) => s.loadFromArchive);
   const setActiveModule = useNavStore((s) => s.setActiveModule);
 
@@ -485,6 +487,14 @@ function SessionDetailView({ detail, onCloseBrowser }: { detail: SessionDetail; 
             >
               ⏱ 一致性测试
             </button>
+            <button
+              onClick={() => setPropagationOpen(true)}
+              className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-purple-400/45 text-purple-200 hover:bg-purple-400/[0.08] transition-colors"
+              title="识别论点单元 + 追踪跨 cycle 的引用 / 反驳 / 回避关系"
+              disabled={detail.cycles.length < 2}
+            >
+              🕸 论点扩散
+            </button>
           </div>
         </div>
         <p className="text-[13px] text-deep-50 leading-relaxed mt-1">{detail.seed_hypothesis}</p>
@@ -493,6 +503,12 @@ function SessionDetailView({ detail, onCloseBrowser }: { detail: SessionDetail; 
         <ConsistencyTestModal
           sessionId={detail.session_id}
           onClose={() => setConsistencyOpen(false)}
+        />
+      )}
+      {propagationOpen && (
+        <PropagationView
+          sessionId={detail.session_id}
+          onClose={() => setPropagationOpen(false)}
         />
       )}
 

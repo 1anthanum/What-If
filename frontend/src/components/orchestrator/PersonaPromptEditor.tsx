@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { usePersonaPromptStore, type PersonaDefault } from '../../store/personaPromptStore';
-import { autoLoopApi, type PromptABResponse } from '../../services/api';
+import { autoLoopApi, classicsApi, type PromptABResponse, type ClassicThinker } from '../../services/api';
 import { METHOD_TEMPLATES } from './methodologyTemplates';
 
 interface Props {
@@ -73,12 +73,37 @@ export function PersonaPromptEditor({ onClose }: Props) {
   // A/B test state
   const [abOpen, setAbOpen] = useState(false);
   const [methodMenuOpen, setMethodMenuOpen] = useState(false);
+  // Classical thinker picker state
+  const [thinkerMenuOpen, setThinkerMenuOpen] = useState(false);
+  const [thinkers, setThinkers] = useState<ClassicThinker[]>([]);
+  const [thinkerQuery, setThinkerQuery] = useState('');
+  const [thinkerLoading, setThinkerLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (thinkerMenuOpen && thinkers.length === 0) {
+      classicsApi.listThinkers().then((r) => setThinkers(r.thinkers)).catch(() => undefined);
+    }
+  }, [thinkerMenuOpen, thinkers.length]);
 
   const applyTemplate = (tplId: string) => {
     const tpl = METHOD_TEMPLATES.find((t) => t.id === tplId);
     if (!tpl) return;
     setDraftText(tpl.system_prompt);
     setMethodMenuOpen(false);
+  };
+
+  const applyThinker = async (thinkerId: string) => {
+    setThinkerLoading(thinkerId);
+    try {
+      const r = await classicsApi.buildPrompt(thinkerId, thinkerQuery.trim() || undefined);
+      setDraftText(r.system_prompt);
+      setThinkerMenuOpen(false);
+      setThinkerQuery('');
+    } catch (e) {
+      console.error('thinker apply failed:', e);
+    } finally {
+      setThinkerLoading(null);
+    }
   };
 
   return (
@@ -167,13 +192,20 @@ export function PersonaPromptEditor({ onClose }: Props) {
                   <span className="text-[11px] font-mono text-deep-300 tracking-wider">
                     {active.role}
                   </span>
-                  <div className="ml-auto relative">
+                  <div className="ml-auto flex items-center gap-1.5 relative">
                     <button
-                      onClick={() => setMethodMenuOpen((v) => !v)}
+                      onClick={() => { setThinkerMenuOpen((v) => !v); setMethodMenuOpen(false); }}
+                      className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-amber-300/45 text-amber-300 hover:bg-amber-300/[0.08]"
+                      title="替换为某位历史哲学家（带其文本作为 RAG 上下文）"
+                    >
+                      📜 历史人物
+                    </button>
+                    <button
+                      onClick={() => { setMethodMenuOpen((v) => !v); setThinkerMenuOpen(false); }}
                       className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-purple-400/45 text-purple-200 hover:bg-purple-400/[0.08]"
                       title="一键替换为方法论模板（苏格拉底问询 / 维特根斯坦治疗 / 现象学还原）"
                     >
-                      📦 方法论模板
+                      📦 方法论
                     </button>
                     {methodMenuOpen && (
                       <div className="absolute right-0 top-full mt-1 z-10 w-80 rounded border border-purple-400/40 bg-deep-900/95 shadow-glow p-1 space-y-1">
@@ -193,6 +225,53 @@ export function PersonaPromptEditor({ onClose }: Props) {
                         <button
                           onClick={() => setMethodMenuOpen(false)}
                           className="w-full text-[9px] font-mono text-deep-300 hover:text-amber-300 py-1 border-t border-deep-400/30"
+                        >
+                          ✕ 取消
+                        </button>
+                      </div>
+                    )}
+                    {thinkerMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-10 w-96 rounded border border-amber-300/40 bg-deep-900/95 shadow-glow p-2">
+                        <div className="mb-2">
+                          <p className="text-[10px] font-mono text-amber-300/85 uppercase tracking-wider mb-1">
+                            提示词（可选）— 用于检索最相关段落
+                          </p>
+                          <input
+                            type="text"
+                            value={thinkerQuery}
+                            onChange={(e) => setThinkerQuery(e.target.value)}
+                            placeholder="例：「无为」「绝对命令」「私人语言」"
+                            className="w-full bg-deep-800/40 border border-deep-400/40 rounded px-2 py-1 text-[11px] text-deep-50 placeholder-deep-300/45 focus:border-amber-300/55"
+                          />
+                        </div>
+                        <div className="max-h-[400px] overflow-y-auto space-y-1">
+                          {thinkers.length === 0 ? (
+                            <p className="text-[11px] text-deep-200/55 italic p-2">载入哲学家列表…</p>
+                          ) : thinkers.map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => applyThinker(t.id)}
+                              disabled={thinkerLoading === t.id}
+                              className="w-full text-left rounded p-2 hover:bg-amber-300/[0.10] transition-colors disabled:opacity-50"
+                            >
+                              <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                                <span className="text-[12px] text-deep-50 font-medium">
+                                  {t.name} <span className="text-[10px] text-deep-300/85">({t.name_en})</span>
+                                </span>
+                                <span className="text-[9px] font-mono text-deep-300 tabular-nums shrink-0">
+                                  {t.passage_count} 段
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-deep-200/75 leading-snug">{t.method_hint}</p>
+                              {thinkerLoading === t.id && (
+                                <p className="text-[10px] font-mono text-amber-300/85 mt-0.5">载入中…</p>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setThinkerMenuOpen(false)}
+                          className="w-full text-[9px] font-mono text-deep-300 hover:text-amber-300 py-1 mt-1 border-t border-deep-400/30"
                         >
                           ✕ 取消
                         </button>

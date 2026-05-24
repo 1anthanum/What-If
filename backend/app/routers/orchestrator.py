@@ -439,6 +439,119 @@ async def decompose_topic(body: dict):
     }
 
 
+@router.get("/classics/thinkers")
+async def list_classical_thinkers():
+    """Surface available historical thinkers in the curated corpus.
+    Used by PersonaPromptEditor to populate the «📜 历史人物」 dropdown."""
+    from app.services.classics import list_thinkers
+    return {"thinkers": list_thinkers()}
+
+
+@router.post("/classics/dialogue")
+async def classics_dialogue(body: dict):
+    """Two historical thinkers in alternating dialogue on a single
+    question. Each turn the next thinker sees the prior responses + their
+    own corpus.
+
+    Body: {thinker_a, thinker_b, question, turns?=3, model_spec?}
+    """
+    import time as _time
+    from app.services.classics import thinker_persona_prompt
+    from app.core.inference import get_backend_from_spec
+
+    a_id = (body.get("thinker_a") or "").strip()
+    b_id = (body.get("thinker_b") or "").strip()
+    question = (body.get("question") or "").strip()
+    turns = max(2, min(int(body.get("turns", 3)), 6))  # total exchanges, alternating
+    model_spec = (body.get("model_spec") or "claude:claude-sonnet-4-6").strip()
+
+    if not a_id or not b_id or not question:
+        raise HTTPException(400, "thinker_a, thinker_b, question all required")
+    if a_id == b_id:
+        raise HTTPException(400, "pick two different thinkers")
+
+    a_persona = thinker_persona_prompt(a_id, query=question, top_k=3)
+    b_persona = thinker_persona_prompt(b_id, query=question, top_k=3)
+    if not a_persona or not b_persona:
+        raise HTTPException(404, "unknown thinker_id")
+
+    transcript: list[dict] = []
+    t0 = _time.perf_counter()
+    for turn_idx in range(turns):
+        speaker = a_persona if turn_idx % 2 == 0 else b_persona
+        other = b_persona if turn_idx % 2 == 0 else a_persona
+        is_first = turn_idx == 0
+
+        if is_first:
+            user_prompt = (
+                f"议题：{question}\n\n"
+                f"你即将和 **{other['name']}** 展开对话。"
+                f"作为开场，请从你的传统出发，给出你对此议题的核心立场（200-300 字）。"
+                f"明确陈述，让对方能精确回应。"
+            )
+        else:
+            # Build a transcript-so-far snippet
+            history = "\n\n".join(
+                f"【{t['speaker_name']}】{t['content']}" for t in transcript
+            )
+            user_prompt = (
+                f"议题：{question}\n\n"
+                f"你正在与 **{other['name']}** 对话，目前的对话进展：\n\n"
+                f"{history}\n\n"
+                f"现在轮到你（{speaker['name']}）回应。请：\n"
+                f"1. **直接回应** {other['name']} 的论点（引用对方原话，指出哪里同意 / 哪里不同意）\n"
+                f"2. 从你的传统出发**推进对话**而非重复你之前的观点\n"
+                f"3. 200-300 字"
+            )
+
+        try:
+            backend = get_backend_from_spec(model_spec, _auto_loop.tracker, tier="persona")
+            content = await backend.complete(
+                system_prompt=speaker["system_prompt"],
+                messages=[{"role": "user", "content": user_prompt}],
+                max_tokens=700, temperature=0.7,
+            )
+        except Exception as e:
+            content = f"[模型 {model_spec} 第 {turn_idx + 1} 回合失败：{type(e).__name__}]"
+
+        transcript.append({
+            "turn": turn_idx + 1,
+            "speaker_id": speaker["persona_id"],
+            "speaker_name": speaker["name"],
+            "content": content,
+        })
+
+    return {
+        "thinker_a": {"id": a_id, "name": a_persona["name"]},
+        "thinker_b": {"id": b_id, "name": b_persona["name"]},
+        "question": question,
+        "transcript": transcript,
+        "a_passages": a_persona["passages_used"],
+        "b_passages": b_persona["passages_used"],
+        "elapsed_ms": round((_time.perf_counter() - t0) * 1000, 1),
+        "model_spec": model_spec,
+    }
+
+
+@router.post("/classics/persona_prompt")
+async def classics_persona_prompt(body: dict):
+    """Build a complete persona system prompt for a specific historical
+    thinker, with relevance-ranked passages from the corpus baked in.
+
+    Body: {thinker_id, query?, top_k?}
+    """
+    from app.services.classics import thinker_persona_prompt
+    thinker_id = (body.get("thinker_id") or "").strip()
+    query = (body.get("query") or "").strip() or None
+    top_k = max(1, min(int(body.get("top_k", 3)), 6))
+    if not thinker_id:
+        raise HTTPException(400, "thinker_id required")
+    out = thinker_persona_prompt(thinker_id, query=query, top_k=top_k)
+    if out is None:
+        raise HTTPException(404, f"unknown thinker_id: {thinker_id}")
+    return out
+
+
 @router.get("/personas")
 async def list_personas():
     """Return the built-in philosophical persona registry — id, name, role,

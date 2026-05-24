@@ -365,6 +365,127 @@ async def run_retrospective(body: dict | None = None):
     }
 
 
+PROPAGATION_SYSTEM = (
+    "你是一位辩论网络分析师。下面是一个多 cycle 哲学辩论的完整摘录。"
+    "你的任务：识别整场辩论中**离散的论点单元**（distinct argument units）"
+    "及它们之间的关系。\n\n"
+    "节点（nodes）：每个独立论点。属性包括 cycle、persona_id、≤ 40 字摘要、"
+    "首次出现的语境。\n\n"
+    "边（edges）：论点之间的关系（一定要有真实文本支撑，不要凭空连）：\n"
+    "- cites：B 直接引用 / 借用 A\n"
+    "- extends：B 在 A 基础上推进、深化、举例\n"
+    "- refutes：B 明确反驳 / 否定 A\n"
+    "- modifies：B 部分接受 A 但加条件 / 限定\n"
+    "- ignores_despite_relevance：B 应该回应 A 但没回应（沉默式回避）\n\n"
+    "**重要**：\n"
+    "- 只识别**真正反复出现 / 真正被回应**的论点；不要为了凑数标关系\n"
+    "- 「ignores_despite_relevance」要谨慎用 — 只在某论点明显切题但被后续 persona 完全跳过时\n"
+    "- 严格按 cycle 顺序：边的 source 必须早于 target\n\n"
+    "严格输出 JSON：\n"
+    "{\n"
+    "  \"arguments\": [\n"
+    "    {\"id\": \"arg_<cycle>_<persona_id>_<n>\", \"cycle\": int, \"persona_id\": str, "
+    "\"persona_name\": str, \"summary\": \"≤ 40 字论点摘要\"}\n"
+    "  ],\n"
+    "  \"edges\": [\n"
+    "    {\"from\": \"arg_id\", \"to\": \"arg_id\", \"kind\": \"cites|extends|refutes|modifies|ignores_despite_relevance\", "
+    "\"note\": \"≤ 30 字关系性质\"}\n"
+    "  ],\n"
+    "  \"key_threads\": [\n"
+    "    \"≤ 80 字描述贯穿多 cycle 的一条主线（例：「正题 cycle 1 提出的 X，cycle 3 被批判理论扩展成 Y」）\"\n"
+    "  ],\n"
+    "  \"dead_ends\": [\n"
+    "    \"被提出但被后续完全忽略的论点 id\"\n"
+    "  ]\n"
+    "}\n"
+    "至少识别 4 个 arguments、至多 20 个；edges 数应反映真实联系（典型 6-15 条）。"
+    "只输出 JSON。"
+)
+
+
+@router.post("/{session_id}/propagation")
+async def propagation_analysis(session_id: str):
+    """Identify argument units across cycles + trace how each is cited /
+    extended / refuted / modified / ignored in subsequent cycles.
+    Output is a small directed graph the frontend can render.
+    """
+    from app.core.inference import get_strong_backend
+    from app.routers.orchestrator import _auto_loop
+
+    full = get_session(session_id)
+    if not full:
+        raise HTTPException(404, f"session {session_id} not found")
+    cycles = full.get("cycles") or []
+    if len(cycles) < 2:
+        raise HTTPException(400, "propagation analysis needs ≥ 2 cycles to find inter-cycle edges")
+
+    excerpt_lines = [f"# Session #{session_id}", f"种子: {full.get('seed_hypothesis', '')}", ""]
+    for c in cycles:
+        excerpt_lines.append(f"## Cycle {c['cycle_num']}: {c.get('hypothesis', '')}")
+        for p in (c.get("personas") or []):
+            content = (p.get("content") or "")[:600]
+            excerpt_lines.append(f"\n### {p.get('persona_name', '?')} ({p.get('persona_id', '?')})")
+            excerpt_lines.append(content)
+        excerpt_lines.append("")
+    context = "\n".join(excerpt_lines)[:24000]
+
+    backend = get_strong_backend(_auto_loop.tracker)
+    try:
+        raw = await backend.complete(
+            system_prompt=PROPAGATION_SYSTEM,
+            messages=[{"role": "user", "content": f"{context}\n\n请按 schema 输出 JSON。"}],
+            max_tokens=3000, temperature=0.2,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"propagation backend error: {type(e).__name__}: {str(e)[:200]}")
+
+    raw = re.sub(r"```(?:json)?\s*", "", raw or "")
+    raw = re.sub(r"```\s*$", "", raw)
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not m:
+        return {"arguments": [], "edges": [], "key_threads": [], "dead_ends": [], "parse_error": True}
+    try:
+        parsed = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return {"arguments": [], "edges": [], "key_threads": [], "dead_ends": [], "parse_error": True}
+
+    valid_kinds = {"cites", "extends", "refutes", "modifies", "ignores_despite_relevance"}
+    args = []
+    for a in (parsed.get("arguments") or [])[:25]:
+        if not isinstance(a, dict):
+            continue
+        args.append({
+            "id": str(a.get("id", ""))[:60],
+            "cycle": int(a.get("cycle", 0) or 0),
+            "persona_id": str(a.get("persona_id", ""))[:40],
+            "persona_name": str(a.get("persona_name", ""))[:40],
+            "summary": str(a.get("summary", ""))[:120],
+        })
+    arg_ids = {a["id"] for a in args}
+    edges = []
+    for e in (parsed.get("edges") or [])[:30]:
+        if not isinstance(e, dict):
+            continue
+        kind = str(e.get("kind", "")).lower()
+        if kind not in valid_kinds:
+            continue
+        f, t = str(e.get("from", "")), str(e.get("to", ""))
+        if f not in arg_ids or t not in arg_ids:
+            continue
+        edges.append({
+            "from": f, "to": t, "kind": kind,
+            "note": str(e.get("note", ""))[:80],
+        })
+    return {
+        "session_id": session_id,
+        "arguments": args,
+        "edges": edges,
+        "key_threads": [str(x)[:160] for x in (parsed.get("key_threads") or [])][:5],
+        "dead_ends": [str(x)[:60] for x in (parsed.get("dead_ends") or [])][:8],
+        "model": backend.backend_name(),
+    }
+
+
 CONSISTENCY_COMPARE_SYSTEM = (
     "你是一位 LLM 立场一致性评估员。两段文本来自**同一个 persona**回答**同一个问题**，"
     "但产生时间不同（可能间隔几天到几个月）。判定该 persona 的立场在两次之间是否一致。\n\n"

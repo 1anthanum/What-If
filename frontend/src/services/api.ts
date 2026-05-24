@@ -831,6 +831,61 @@ export interface RobustnessResponse {
   elapsed_ms: number;
 }
 
+export interface ClassicThinker {
+  id: string;
+  name: string;
+  name_en: string;
+  tradition: string;
+  method_hint: string;
+  passage_count: number;
+}
+
+export interface ClassicPersonaPrompt {
+  persona_id: string;
+  name: string;
+  name_en: string;
+  system_prompt: string;
+  passages_used: Array<{
+    source: string;
+    text: string;
+    topic?: string[];
+    relevance?: number;
+  }>;
+}
+
+export interface ClassicsDialogueTurn {
+  turn: number;
+  speaker_id: string;
+  speaker_name: string;
+  content: string;
+}
+
+export interface ClassicsDialogueResponse {
+  thinker_a: { id: string; name: string };
+  thinker_b: { id: string; name: string };
+  question: string;
+  transcript: ClassicsDialogueTurn[];
+  a_passages: Array<{ source: string; text: string; relevance?: number }>;
+  b_passages: Array<{ source: string; text: string; relevance?: number }>;
+  elapsed_ms: number;
+  model_spec: string;
+}
+
+export const classicsApi = {
+  listThinkers: () =>
+    request<{ thinkers: ClassicThinker[] }>(`/orchestrator/classics/thinkers`),
+  buildPrompt: (thinker_id: string, query?: string, top_k = 3) =>
+    request<ClassicPersonaPrompt>(`/orchestrator/classics/persona_prompt`, {
+      method: 'POST',
+      body: JSON.stringify({ thinker_id, query, top_k }),
+    }),
+  dialogue: (body: { thinker_a: string; thinker_b: string; question: string; turns?: number }) =>
+    request<ClassicsDialogueResponse>(`/orchestrator/classics/dialogue`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+};
+
 export const argumentApi = {
   expand: (thesis: string) =>
     request<ExpansionResponse>(`/argument/expand`, {
