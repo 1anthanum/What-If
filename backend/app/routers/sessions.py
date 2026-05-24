@@ -147,6 +147,113 @@ async def extract_concepts(body: dict | None = None):
     }
 
 
+PERSONALIZED_ADVERSARY_SYSTEM = (
+    "你是一位 prompt 工程师 + 用户认知分析师。下面是某个用户最近 N 个哲学辩论 session 的"
+    "摘录。你的任务：基于此用户**显示出来的论证模式 / 立场偏好 / 思维习惯**，"
+    "生成一个**专门攻击这个用户的魔鬼代言人（adversary）的 system prompt**。\n\n"
+    "这个 adversary 比通用 adversary 强 5 倍 — 因为它知道：\n"
+    "- 这个用户**反复回到哪些立场**（他们的舒适区）\n"
+    "- **从不质疑哪些预设**（他们的盲点）\n"
+    "- **被哪种论证形式说服得最快**（他们对哪种修辞最没抵抗力）\n"
+    "- **对哪个 persona 最反感 / 最跳过**（他们的厌恶过滤）\n\n"
+    "输出严格 JSON：\n"
+    "{\n"
+    "  \"user_fingerprint\": \"≤ 150 字 — 用户的核心认知模式画像（具体！不要泛泛）\",\n"
+    "  \"blind_spots\": [\"≤ 3 个用户从不质疑的具体预设\"],\n"
+    "  \"comfort_positions\": [\"≤ 3 个用户反复回到的立场\"],\n"
+    "  \"adversary_prompt\": \"完整的 adversary system prompt（≤ 600 字），中文，"
+    "明确告诉这个 adversary 它要专门攻击什么、用什么策略，不要泛泛说『质疑一切』\",\n"
+    "  \"sample_attacks\": [\"≤ 3 个示例攻击 — 当这个 adversary 实际工作时会问什么具体问题\"]\n"
+    "}\n\n"
+    "**重要**：\n"
+    "- 不要做出价值判断（用户的偏好不是「错」的，只是有被挑战的空间）\n"
+    "- adversary 必须**精准、不烦人** — 它的攻击应该让用户「我从没这样想过」而不是「又来了」\n"
+    "- 样本不足时诚实说「需要更多 session 才能生成精准画像」\n\n"
+    "只输出 JSON。"
+)
+
+
+@router.post("/_personalized_adversary")
+async def personalized_adversary(body: dict | None = None):
+    """Generate a custom devil's-advocate system prompt tailored to this
+    user's specific argumentation patterns + blind spots, based on their
+    archived sessions.
+
+    Body: {limit?: int}  — default 15 most recent sessions
+    """
+    body = body or {}
+    limit = max(3, min(int(body.get("limit", 15)), 30))
+
+    from app.core.inference import get_strong_backend
+    from app.routers.orchestrator import _auto_loop
+
+    sessions = list_sessions(limit=limit)
+    if not sessions or len(sessions) < 3:
+        return {
+            "user_fingerprint": "样本不足 — 至少需要 3 个持久化 session 才能生成画像",
+            "blind_spots": [],
+            "comfort_positions": [],
+            "adversary_prompt": "",
+            "sample_attacks": [],
+            "sessions_analyzed": len(sessions or []),
+        }
+
+    parts: list[str] = []
+    for s in sessions:
+        full = get_session(s["session_id"])
+        if not full:
+            continue
+        block = [f"=== {s['session_id']} ({s['mode']}) ===",
+                 f"用户提的种子: {s['seed_hypothesis']}"]
+        for c in (full.get("cycles") or [])[:2]:
+            if c.get("hypothesis") and c["hypothesis"] != s["seed_hypothesis"]:
+                block.append(f"演化为: {c['hypothesis']}")
+        if full.get("final_synthesis"):
+            block.append(f"用户接受的综合: {(full['final_synthesis'])[:300]}")
+        parts.append("\n".join(block))
+
+    context = "\n\n".join(parts)[:20000]
+    backend = get_strong_backend(_auto_loop.tracker)
+    try:
+        raw = await backend.complete(
+            system_prompt=PERSONALIZED_ADVERSARY_SYSTEM,
+            messages=[{"role": "user", "content": f"以下是 {len(parts)} 个用户 session：\n\n{context}\n\n请按 schema 输出 JSON。"}],
+            max_tokens=2000, temperature=0.4,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"personalized adversary backend error: {type(e).__name__}: {str(e)[:200]}")
+
+    raw = re.sub(r"```(?:json)?\s*", "", raw or "")
+    raw = re.sub(r"```\s*$", "", raw)
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not m:
+        return {
+            "user_fingerprint": "解析失败",
+            "blind_spots": [], "comfort_positions": [],
+            "adversary_prompt": "", "sample_attacks": [],
+            "sessions_analyzed": len(parts),
+        }
+    try:
+        parsed = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return {
+            "user_fingerprint": "JSON 解析失败",
+            "blind_spots": [], "comfort_positions": [],
+            "adversary_prompt": "", "sample_attacks": [],
+            "sessions_analyzed": len(parts),
+        }
+
+    return {
+        "user_fingerprint": str(parsed.get("user_fingerprint", ""))[:500],
+        "blind_spots": [str(x)[:120] for x in (parsed.get("blind_spots") or [])][:5],
+        "comfort_positions": [str(x)[:120] for x in (parsed.get("comfort_positions") or [])][:5],
+        "adversary_prompt": str(parsed.get("adversary_prompt", ""))[:3000],
+        "sample_attacks": [str(x)[:200] for x in (parsed.get("sample_attacks") or [])][:5],
+        "sessions_analyzed": len(parts),
+        "model": backend.backend_name(),
+    }
+
+
 RETROSPECTIVE_SYSTEM = (
     "你是一位元分析专家。下面是来自多个 philosophical auto-loop session 的"
     "**摘录**：每段包含 seed hypothesis、几个 persona 的发言节选、综合摘要。\n\n"

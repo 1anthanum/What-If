@@ -11,7 +11,8 @@
  * - does swapping the model change a persona's dogmatic rate?
  */
 import { useEffect, useState, useCallback } from 'react';
-import { sessionsApi, type BiasAnalytics, type RetrospectiveReport } from '../../services/sessionsApi';
+import { sessionsApi, type BiasAnalytics, type RetrospectiveReport, type PersonalizedAdversary } from '../../services/sessionsApi';
+import { usePersonaPromptStore } from '../../store/personaPromptStore';
 
 const PERSONA_LABELS: Record<string, string> = {
   rationalist: '理性主义',
@@ -49,6 +50,24 @@ export function BiasAnalysisPanel({ onClose }: Props) {
     } finally {
       setRetroLoading(false);
     }
+  };
+
+  const [adv, setAdv] = useState<PersonalizedAdversary | null>(null);
+  const [advLoading, setAdvLoading] = useState(false);
+  const [advError, setAdvError] = useState<string | null>(null);
+  const setPersonaEdit = usePersonaPromptStore((s) => s.setEdit);
+
+  const runAdv = async () => {
+    setAdvLoading(true); setAdvError(null);
+    try { setAdv(await sessionsApi.personalizedAdversary(15)); }
+    catch (e) { setAdvError((e as Error).message); }
+    finally { setAdvLoading(false); }
+  };
+
+  const applyAsAdversary = () => {
+    if (!adv?.adversary_prompt) return;
+    setPersonaEdit('adversary', adv.adversary_prompt);
+    alert('✓ 已应用为 adversary persona 的自定义 prompt。下次在 auto-loop 开启「对抗模式」时即生效。');
   };
 
   const refresh = useCallback(async () => {
@@ -315,6 +334,82 @@ export function BiasAnalysisPanel({ onClose }: Props) {
                   <p className="text-[10px] font-mono text-deep-300/65 tabular-nums">
                     基于 {retro.sessions_analyzed} 个 session{retro.model ? ` · model: ${retro.model}` : ''}
                   </p>
+                </div>
+              )}
+            </div>
+
+            {/* Personalized adversary — generates a custom devil's-advocate prompt
+                targeting THIS user's specific blind spots */}
+            <div className="mb-5 rounded-lg border border-earth-rust/35 bg-earth-rust/[0.04] p-3">
+              <div className="flex items-baseline justify-between gap-2 mb-2">
+                <div>
+                  <span className="text-[10px] font-mono text-earth-rust/95 uppercase tracking-wider">
+                    🎯 个性化魔鬼代言人
+                  </span>
+                  <p className="text-[11px] text-deep-100/65 mt-1 leading-snug max-w-xl">
+                    基于你最近 15 个 session，LLM 找出你的论证舒适区 + 从不质疑的预设，
+                    生成一个**专门攻击你**的 adversary。比通用 adversary 精准 5×。
+                  </p>
+                </div>
+                <button
+                  onClick={runAdv}
+                  disabled={advLoading}
+                  className="text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-earth-rust/55 text-earth-rust hover:bg-earth-rust/[0.10] disabled:opacity-40 shrink-0 whitespace-nowrap"
+                >
+                  {advLoading ? '画像中…' : '▶ 生成我的魔鬼'}
+                </button>
+              </div>
+              {advError && (
+                <div className="text-[11px] text-earth-rust/90 bg-earth-rust/10 border border-earth-rust/30 rounded px-2.5 py-1.5 mt-2">
+                  {advError}
+                </div>
+              )}
+              {adv && (
+                <div className="mt-3 space-y-2.5">
+                  {adv.user_fingerprint && (
+                    <div className="rounded bg-deep-700/30 border border-deep-400/30 px-2.5 py-2">
+                      <p className="text-[10px] font-mono text-amber-300/85 uppercase mb-1">你的认知画像</p>
+                      <p className="text-[12px] text-deep-50 leading-snug italic">{adv.user_fingerprint}</p>
+                    </div>
+                  )}
+                  {adv.blind_spots.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-mono text-earth-rust/95 uppercase mb-1">你从不质疑的预设</p>
+                      <ul className="space-y-0.5 text-[11px] text-deep-100/85 pl-3">
+                        {adv.blind_spots.map((b, i) => <li key={i}>· {b}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {adv.comfort_positions.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-mono text-amber-300/85 uppercase mb-1">你的舒适区立场</p>
+                      <ul className="space-y-0.5 text-[11px] text-deep-100/85 pl-3">
+                        {adv.comfort_positions.map((b, i) => <li key={i}>· {b}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {adv.sample_attacks.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-mono text-purple-400/90 uppercase mb-1">它会怎么攻击你（样例）</p>
+                      <ul className="space-y-1 text-[11px] text-deep-100/85 pl-3">
+                        {adv.sample_attacks.map((a, i) => <li key={i} className="italic">「{a}」</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {adv.adversary_prompt && (
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-earth-rust/15">
+                      <p className="text-[10px] font-mono text-deep-300/70">
+                        生成 prompt {adv.adversary_prompt.length} 字 · 基于 {adv.sessions_analyzed} session
+                      </p>
+                      <button
+                        onClick={applyAsAdversary}
+                        className="text-[11px] font-mono uppercase tracking-wider px-2.5 py-1 rounded border border-earth-rust/65 bg-earth-rust/[0.10] text-earth-rust hover:bg-earth-rust/[0.18] shrink-0"
+                        title="应用为 adversary persona 的 override；下次开「对抗模式」生效"
+                      >
+                        🎯 应用为我的 adversary
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

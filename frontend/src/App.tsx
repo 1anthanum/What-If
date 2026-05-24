@@ -16,6 +16,7 @@ import { BiasAnalysisPanel } from './components/common/BiasAnalysisPanel';
 import { ConceptEvolutionPanel } from './components/common/ConceptEvolutionPanel';
 import { ClassroomPanel } from './components/common/ClassroomPanel';
 import { ArgumentLab } from './components/common/ArgumentLab';
+import { PremortemPanel } from './components/common/PremortemPanel';
 import { Button } from './components/common/ui';
 import { useDebateStore } from './store/debateStore';
 import { useCausalStore } from './store/causalStore';
@@ -46,6 +47,7 @@ export default function App() {
   const [conceptsOpen, setConceptsOpen] = useState(false);
   const [classroomOpen, setClassroomOpen] = useState(false);
   const [labOpen, setLabOpen] = useState(false);
+  const [premortemOpen, setPremortemOpen] = useState(false);
 
   // Determine which module's token usage to show
   const tokenUsage =
@@ -157,6 +159,13 @@ export default function App() {
             >
               🔬 Lab
             </button>
+            <button
+              onClick={() => setPremortemOpen(true)}
+              className="text-[11px] font-mono uppercase tracking-[0.18em] text-deep-200/65 hover:text-amber-300 px-2.5 py-1.5 rounded border border-deep-400/20 hover:border-amber-300/35 transition-colors"
+              title="Pre-mortem：做决定前，5 个传统各写失败剧本"
+            >
+              🩺 Premortem
+            </button>
             <SettingsPanel />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-deep-800/60 border tk-border-faint">
               <span className="status-dot bg-electric" />
@@ -267,6 +276,9 @@ export default function App() {
 
       {/* Argument Lab — expand / density / robustness */}
       {labOpen && <ArgumentLab onClose={() => setLabOpen(false)} />}
+
+      {/* Pre-mortem — failure-scenario writing for a personal decision */}
+      {premortemOpen && <PremortemPanel onClose={() => setPremortemOpen(false)} />}
 
       {/* Footer */}
       <DisclaimerFooter />

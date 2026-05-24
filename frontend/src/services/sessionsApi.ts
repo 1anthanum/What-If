@@ -145,6 +145,16 @@ export interface ConsistencyReport {
   results: ConsistencyResult[];
 }
 
+export interface PersonalizedAdversary {
+  user_fingerprint: string;
+  blind_spots: string[];
+  comfort_positions: string[];
+  adversary_prompt: string;
+  sample_attacks: string[];
+  sessions_analyzed: number;
+  model?: string;
+}
+
 async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${BASE_URL}${path}`, init);
   if (!r.ok) throw new Error(`HTTP ${r.status} on ${path}`);
@@ -177,6 +187,12 @@ export const sessionsApi = {
   consistencyTest: (sessionId: string) =>
     _fetch<ConsistencyReport>(`/sessions/${sessionId}/consistency_test`, {
       method: 'POST',
+    }),
+  personalizedAdversary: (limit = 15) =>
+    _fetch<PersonalizedAdversary>(`/sessions/_personalized_adversary`, {
+      method: 'POST',
+      body: JSON.stringify({ limit }),
+      headers: { 'Content-Type': 'application/json' },
     }),
   remove: (sessionId: string) =>
     _fetch<{ status: string }>(`/sessions/${sessionId}`, { method: 'DELETE' }),

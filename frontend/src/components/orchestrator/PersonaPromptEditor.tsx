@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { usePersonaPromptStore, type PersonaDefault } from '../../store/personaPromptStore';
 import { autoLoopApi, type PromptABResponse } from '../../services/api';
+import { METHOD_TEMPLATES } from './methodologyTemplates';
 
 interface Props {
   onClose: () => void;
@@ -71,6 +72,14 @@ export function PersonaPromptEditor({ onClose }: Props) {
   const isEdited = active ? !!edits[active.id] : false;
   // A/B test state
   const [abOpen, setAbOpen] = useState(false);
+  const [methodMenuOpen, setMethodMenuOpen] = useState(false);
+
+  const applyTemplate = (tplId: string) => {
+    const tpl = METHOD_TEMPLATES.find((t) => t.id === tplId);
+    if (!tpl) return;
+    setDraftText(tpl.system_prompt);
+    setMethodMenuOpen(false);
+  };
 
   return (
     <div
@@ -158,8 +167,40 @@ export function PersonaPromptEditor({ onClose }: Props) {
                   <span className="text-[11px] font-mono text-deep-300 tracking-wider">
                     {active.role}
                   </span>
+                  <div className="ml-auto relative">
+                    <button
+                      onClick={() => setMethodMenuOpen((v) => !v)}
+                      className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-purple-400/45 text-purple-200 hover:bg-purple-400/[0.08]"
+                      title="一键替换为方法论模板（苏格拉底问询 / 维特根斯坦治疗 / 现象学还原）"
+                    >
+                      📦 方法论模板
+                    </button>
+                    {methodMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-10 w-80 rounded border border-purple-400/40 bg-deep-900/95 shadow-glow p-1 space-y-1">
+                        {METHOD_TEMPLATES.map((tpl) => (
+                          <button
+                            key={tpl.id}
+                            onClick={() => applyTemplate(tpl.id)}
+                            className="w-full text-left rounded p-2 hover:bg-purple-400/[0.10] transition-colors"
+                          >
+                            <div className="flex items-baseline gap-1.5 mb-0.5">
+                              <span className="text-[14px]">{tpl.icon}</span>
+                              <span className="text-[12px] text-deep-50 font-medium">{tpl.name}</span>
+                            </div>
+                            <p className="text-[10px] text-deep-200/80 leading-snug">{tpl.short}</p>
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setMethodMenuOpen(false)}
+                          className="w-full text-[9px] font-mono text-deep-300 hover:text-amber-300 py-1 border-t border-deep-400/30"
+                        >
+                          ✕ 取消
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   {isEdited && (
-                    <span className="ml-auto text-[10px] font-mono text-earth-green/85 px-1.5 py-0.5 rounded border border-earth-green/40">
+                    <span className="text-[10px] font-mono text-earth-green/85 px-1.5 py-0.5 rounded border border-earth-green/40">
                       ✓ 已自定义
                     </span>
                   )}

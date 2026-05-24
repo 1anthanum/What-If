@@ -666,6 +666,112 @@ AB_COMPARE_SYSTEM = (
 )
 
 
+PREMORTEM_SYSTEM_PROMPT = (
+    "你是一位 pre-mortem 顾问。用户即将做一个具体决定 — 请假设这个决定在指定时间后"
+    "**失败了**，从你的哲学传统视角，写出最可能的失败路径。\n\n"
+    "Pre-mortem 的目的是**在做决定前**暴露盲区，而不是事后归因。所以：\n"
+    "- 失败路径必须**具体**（什么会发生 / 谁会怎么反应 / 哪些预设会被推翻）\n"
+    "- 关键警告必须是**用户当下可以验证或防范**的（不是「运气不好」这种空话）\n"
+    "- 严重程度 1-5：1=小挫折但仍是好决定，5=两年后会让用户后悔不迭\n\n"
+    "严格输出 JSON：\n"
+    "{\n"
+    "  \"failure_path\": \"≤ 250 字的具体失败叙述\",\n"
+    "  \"key_warning\": \"≤ 50 字 — 一句话最关键的早期预警信号\",\n"
+    "  \"hidden_assumption\": \"≤ 50 字 — 用户当下没意识到的关键预设\",\n"
+    "  \"early_check\": \"≤ 40 字 — 决定前可以做的一个具体测试\",\n"
+    "  \"severity\": 1-5\n"
+    "}\n"
+    "只输出 JSON。"
+)
+
+
+@router.post("/premortem")
+async def premortem(body: dict):
+    """Personal decision pre-mortem — 5 personas each write the most
+    plausible failure scenario for a decision, after a specified time
+    horizon. Different from a "what-if" debate: input is a *concrete
+    decision*, output is *actionable warnings*.
+
+    Body: {decision, time_horizon?, model_spec?}
+    """
+    import asyncio as _asyncio
+    import json as _json
+    import re as _re
+    import time as _time
+
+    from app.core.inference import get_backend_from_spec
+    from app.services.auto_loop import PHILOSOPHICAL_PERSONAS
+
+    decision = (body.get("decision") or "").strip()
+    horizon = (body.get("time_horizon") or "2 年").strip()
+    model_spec = (body.get("model_spec") or "claude:claude-sonnet-4-6").strip()
+    if not decision:
+        raise HTTPException(400, "decision required")
+    if len(decision) < 20:
+        raise HTTPException(400, "decision too short — describe in ≥ 20 chars")
+
+    personas = PHILOSOPHICAL_PERSONAS[:5]
+
+    async def _one(persona: dict) -> dict:
+        user_prompt = (
+            f"用户的决定：{decision}\n\n"
+            f"假设时间过了 **{horizon}** 后，这个决定**失败了**。"
+            f"请按 schema 输出 JSON。"
+        )
+        t0 = _time.perf_counter()
+        try:
+            backend = get_backend_from_spec(model_spec, _auto_loop.tracker, tier="persona")
+            # Compose: persona's voice + pre-mortem instructions
+            combined_system = (
+                persona["system_prompt"] + "\n\n" + PREMORTEM_SYSTEM_PROMPT
+            )
+            raw = await backend.complete(
+                system_prompt=combined_system,
+                messages=[{"role": "user", "content": user_prompt}],
+                max_tokens=900, temperature=0.6,
+            )
+            raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+            raw = _re.sub(r"```\s*$", "", raw)
+            m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+            parsed = _json.loads(m.group(0)) if m else None
+            if not isinstance(parsed, dict):
+                parsed = None
+        except Exception as e:
+            return {
+                "persona_id": persona["id"],
+                "persona_name": persona["name"],
+                "model": model_spec,
+                "error": f"{type(e).__name__}: {str(e)[:200]}",
+                "latency_ms": round((_time.perf_counter() - t0) * 1000, 1),
+            }
+        return {
+            "persona_id": persona["id"],
+            "persona_name": persona["name"],
+            "model": model_spec,
+            "failure_path": str((parsed or {}).get("failure_path", ""))[:600],
+            "key_warning": str((parsed or {}).get("key_warning", ""))[:120],
+            "hidden_assumption": str((parsed or {}).get("hidden_assumption", ""))[:120],
+            "early_check": str((parsed or {}).get("early_check", ""))[:100],
+            "severity": max(1, min(5, int((parsed or {}).get("severity", 3) or 3))),
+            "latency_ms": round((_time.perf_counter() - t0) * 1000, 1),
+        }
+
+    t0 = _time.perf_counter()
+    results = await _asyncio.gather(*[_one(p) for p in personas])
+    elapsed_ms = round((_time.perf_counter() - t0) * 1000, 1)
+
+    valid = [r for r in results if "error" not in r]
+    avg_severity = round(sum(r["severity"] for r in valid) / len(valid), 1) if valid else 0.0
+
+    return {
+        "decision": decision,
+        "time_horizon": horizon,
+        "results": results,
+        "avg_severity": avg_severity,
+        "elapsed_ms": elapsed_ms,
+    }
+
+
 @router.post("/persona/ab_test")
 async def ab_test_persona_prompt(body: dict):
     """A/B test two persona prompt versions against the same question.

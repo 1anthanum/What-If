@@ -859,6 +859,27 @@ export interface ClassroomGradeResponse {
   feedback: ClassroomFeedback;
 }
 
+export interface PremortemResult {
+  persona_id: string;
+  persona_name: string;
+  model: string;
+  failure_path?: string;
+  key_warning?: string;
+  hidden_assumption?: string;
+  early_check?: string;
+  severity?: number;
+  latency_ms: number;
+  error?: string;
+}
+
+export interface PremortemResponse {
+  decision: string;
+  time_horizon: string;
+  results: PremortemResult[];
+  avg_severity: number;
+  elapsed_ms: number;
+}
+
 export interface PromptABResponse {
   persona_id: string;
   question: string;
@@ -1093,6 +1114,13 @@ export const autoLoopApi = {
     model_spec?: string;
   }) =>
     request<ClassroomGradeResponse>(`/orchestrator/persona/classroom_grade`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Pre-mortem for a personal decision — 5 personas write failure paths. */
+  premortem: (body: { decision: string; time_horizon?: string; model_spec?: string }) =>
+    request<PremortemResponse>(`/orchestrator/premortem`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
