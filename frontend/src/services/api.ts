@@ -1063,11 +1063,25 @@ export const votingApi = {
 
 // ─── Topic utility API (pre-flight critique + decompose) ──
 
+export type QuestionKind =
+  | 'genuine_philosophical'
+  | 'pseudo_philosophical'
+  | 'factual_lookup'
+  | 'personal_decision_deferred'
+  | 'cbt_rumination';
+
+export type BetterTool =
+  | 'debate' | 'decision_matrix' | 'fact_lookup'
+  | 'therapy_journaling' | 'pros_cons_list';
+
 export interface TopicCritique {
   issues: string[];
   suggested_rewrite: string;
   complexity_score: number;  // 0..10
   ready_to_run: boolean;
+  question_kind?: QuestionKind;
+  kind_reason?: string;
+  better_tool?: BetterTool;
 }
 export interface TopicDecomposition {
   is_compound: boolean;

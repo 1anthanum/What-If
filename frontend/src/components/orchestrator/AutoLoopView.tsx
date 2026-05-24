@@ -21,6 +21,8 @@ import { PortalSendButton } from '../common/PortalSendButton';
 import { PersonaPromptEditor } from './PersonaPromptEditor';
 import { PersonaCompareModal } from './PersonaCompareModal';
 import { PersonaFollowupModal } from './PersonaFollowupModal';
+import { PreDebateHygiene, PostDebateConfrontation } from './PreDebateHygiene';
+import { useHygieneStore } from '../../store/preDebateHygieneStore';
 import { usePersonaPromptStore } from '../../store/personaPromptStore';
 import type { AutoLoopConfig, AutoLoopMode } from '../../services/api';
 
@@ -87,6 +89,8 @@ export function AutoLoopView() {
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const editedPersonaIds = usePersonaPromptStore((s) => s.editedIds);
   const overridePayload = usePersonaPromptStore((s) => s.overridePayload);
+  const hygieneCommit = useHygieneStore((s) => s.commitDraftTo);
+  const hygieneFor = useHygieneStore((s) => s.bySession);
   // Philosophical presets
   const [presetCategory, setPresetCategory] = useState<PhilosophicalPreset['category'] | 'all'>('all');
   const [presetsCollapsed, setPresetsCollapsed] = useState(false);
@@ -120,6 +124,14 @@ export function AutoLoopView() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [status]);
+
+  // Bind pre-debate hygiene draft to the session_id once the SSE returns it.
+  // Runs once per session_id transition; idempotent commit.
+  useEffect(() => {
+    if (store.sessionId && status === 'running' && !hygieneFor[store.sessionId]) {
+      hygieneCommit(store.sessionId);
+    }
+  }, [store.sessionId, status, hygieneCommit, hygieneFor]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -493,6 +505,40 @@ export function AutoLoopView() {
                         {critique.ready_to_run ? ' · ✓ 可直接跑' : ' · ⚠ 建议优化'}
                       </span>
                     </div>
+                    {critique.question_kind && critique.question_kind !== 'genuine_philosophical' && (
+                      <div className="mb-2 rounded border border-earth-rust/40 bg-earth-rust/[0.06] p-2">
+                        <p className="text-[10px] font-mono text-earth-rust/95 uppercase tracking-wider mb-1">
+                          ⚠ 这可能不是 5-persona 辩论的合适议题
+                        </p>
+                        <p className="text-[11px] text-deep-100/90 leading-snug">
+                          类型：<span className="font-mono text-amber-300/95">
+                          {({
+                            pseudo_philosophical: '伪哲学（拖延决定）',
+                            factual_lookup: '事实查询（去搜索引擎）',
+                            personal_decision_deferred: '个人决定（应列利弊清单）',
+                            cbt_rumination: '思维反刍（建议日记治疗）',
+                            genuine_philosophical: '真哲学',
+                          } as Record<string, string>)[critique.question_kind] || critique.question_kind}
+                          </span>
+                        </p>
+                        {critique.kind_reason && (
+                          <p className="text-[11px] text-deep-100/80 italic leading-snug mt-1">
+                            {critique.kind_reason}
+                          </p>
+                        )}
+                        {critique.better_tool && critique.better_tool !== 'debate' && (
+                          <p className="text-[10px] font-mono text-earth-green/85 mt-1">
+                            建议工具：{({
+                              decision_matrix: '决策矩阵（自己 / Notion 模板）',
+                              fact_lookup: '搜索引擎 / 文献',
+                              therapy_journaling: '认知治疗日记',
+                              pros_cons_list: '简单利弊清单',
+                              debate: 'debate',
+                            } as Record<string, string>)[critique.better_tool]}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {critique.issues.length > 0 && (
                       <ul className="space-y-0.5 mb-2">
                         {critique.issues.map((iss, i) => (
@@ -655,6 +701,11 @@ export function AutoLoopView() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* Pre-debate cognitive hygiene — mind-change commitment + value ranking + desired stance */}
+              {configMode === 'philosophical' && seedInput.trim() && (
+                <PreDebateHygiene hypothesis={seedInput.trim()} onSaved={() => undefined} />
               )}
 
               {/* Stance prediction game — predict each persona's stance before debate starts */}
@@ -1182,6 +1233,12 @@ export function AutoLoopView() {
                 </p>
               )}
             </div>
+          )}
+
+          {/* Post-debate confrontation — show user their pre-debate
+              commitments so they can audit their own movement */}
+          {store.sessionId && hygieneFor[store.sessionId] && (
+            <PostDebateConfrontation record={hygieneFor[store.sessionId]} />
           )}
 
           {/* Feature 1: Epistemic Divergence Heatmap */}

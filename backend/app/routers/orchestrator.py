@@ -313,13 +313,28 @@ async def critique_topic(body: dict):
 
     backend = get_cheap_backend(_autonomous.tracker)
     system = (
-        "你是一位严苛的议题预审员。任务：检查一个 what-if 议题在送进辩论引擎前是否需要修改。\n"
-        "输出严格 JSON：{issues: [≤3 条 ≤25字], suggested_rewrite: 1 句优化版议题（≤60字）, "
-        "complexity_score: 0-10（0=极简单，10=过度复杂应拆分）, ready_to_run: bool}\n"
-        "判断维度：\n"
-        "  · 是否过于宏大、变量过多？（→ 应拆分）\n"
-        "  · 是否隐含了未声明的前提？（→ 应明确）\n"
-        "  · 措辞是否含糊（如「成功」「快乐」等抽象词未定义）？\n"
+        "你是一位严苛的议题预审员 + 决策类型识别员。任务：检查一个 what-if 议题"
+        "在送进哲学辩论引擎前是否合适。\n\n"
+        "输出严格 JSON：{\n"
+        "  issues: [≤3 条 ≤25字 — 措辞 / 范围 / 隐含前提问题],\n"
+        "  suggested_rewrite: 1 句优化版议题（≤60字）,\n"
+        "  complexity_score: 0-10（0=极简单，10=过度复杂应拆分）,\n"
+        "  ready_to_run: bool,\n"
+        "  question_kind: 'genuine_philosophical' | 'pseudo_philosophical' | 'factual_lookup' | 'personal_decision_deferred' | 'cbt_rumination',\n"
+        "  kind_reason: ≤60 字 — 为什么是这一类,\n"
+        "  better_tool: 'debate' | 'decision_matrix' | 'fact_lookup' | 'therapy_journaling' | 'pros_cons_list'\n"
+        "}\n\n"
+        "**关键判断**：\n"
+        "- `genuine_philosophical`：真正的开放议题，理性人会持久分歧 → debate\n"
+        "- `pseudo_philosophical`：表面像哲学但本质是「我应不应该 X」"
+        "（已有事实答案，用户用辩论拖延决定）→ decision_matrix\n"
+        "- `factual_lookup`：有客观答案，问题应该问搜索引擎或文献 → fact_lookup\n"
+        "- `personal_decision_deferred`：明显的个人决定（接 offer / 分手 / 搬家），"
+        "辩论会强化分析瘫痪 → pros_cons_list\n"
+        "- `cbt_rumination`：反复在同一议题打转的思维反刍，需要的是认知治疗"
+        "而非更多辩论 → therapy_journaling\n\n"
+        "对 pseudo / personal / rumination 类，issues 必须明确指出「这议题"
+        "可能不适合 5-persona 辩论」。\n"
         "不要任何额外解释，仅输出 JSON。"
     )
     try:
@@ -342,11 +357,25 @@ async def critique_topic(body: dict):
     except _json.JSONDecodeError:
         return {"issues": [], "suggested_rewrite": topic, "complexity_score": 5,
                 "ready_to_run": True, "raw": raw[:200]}
+    valid_kinds = {
+        "genuine_philosophical", "pseudo_philosophical", "factual_lookup",
+        "personal_decision_deferred", "cbt_rumination",
+    }
+    valid_tools = {"debate", "decision_matrix", "fact_lookup", "therapy_journaling", "pros_cons_list"}
+    qk = str(parsed.get("question_kind", "genuine_philosophical"))
+    if qk not in valid_kinds:
+        qk = "genuine_philosophical"
+    bt = str(parsed.get("better_tool", "debate"))
+    if bt not in valid_tools:
+        bt = "debate"
     return {
         "issues": [str(x)[:60] for x in (parsed.get("issues") or [])][:5],
         "suggested_rewrite": str(parsed.get("suggested_rewrite", topic))[:200],
         "complexity_score": max(0, min(10, int(parsed.get("complexity_score", 5) or 5))),
         "ready_to_run": bool(parsed.get("ready_to_run", True)),
+        "question_kind": qk,
+        "kind_reason": str(parsed.get("kind_reason", ""))[:120],
+        "better_tool": bt,
     }
 
 
