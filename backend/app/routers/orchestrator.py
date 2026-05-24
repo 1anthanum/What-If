@@ -496,6 +496,119 @@ async def find_analogies(body: dict):
     return {"analogies": out}
 
 
+CLASSROOM_GRADE_SYSTEM = (
+    "你是一位哲学课的助教。学生需要扮演某个哲学传统对一个议题作出论证；"
+    "你的任务是把**学生的论证**跟**该传统的 LLM 范本论证**对比，给出建设性反馈。\n\n"
+    "评估时要做到：\n"
+    "- 不评学生「立场对错」（哲学没有标准答案），只评 (a) 是否真正运用了该传统的"
+    "**思维方式 / 核心概念**，(b) 论证是否**结构清晰**，(c) 是否考虑到该传统会想到的"
+    "**反对意见 / 反例**。\n"
+    "- 给出学生**做对了什么**（具体引用）、**漏掉了什么**（具体指出该传统会问什么）、"
+    "**逻辑断点**（论证里的明显跳跃）。\n"
+    "- 总分 1-10：1=完全没抓住传统，5=结构清晰但缺乏传统特色，10=接近一个深谙该传统的研究生。\n\n"
+    "严格输出 JSON：\n"
+    "{\n"
+    "  \"score\": 1-10,\n"
+    "  \"got_right\": [\"≤ 50 字的具体优点\", ...],\n"
+    "  \"missed\": [\"≤ 50 字的具体缺失，例如『未考虑该传统的核心概念 X』\", ...],\n"
+    "  \"gaps\": [\"≤ 50 字的逻辑断点\", ...],\n"
+    "  \"summary\": \"≤ 100 字的总评：学生最需要改进的一个方向\"\n"
+    "}\n"
+    "至少 1、至多 4 项每数组。只输出 JSON。"
+)
+
+
+@router.post("/persona/classroom_grade")
+async def classroom_grade(body: dict):
+    """Classroom mode: student writes argument from a persona's perspective,
+    LLM produces its own version, then a grader LLM provides constructive
+    feedback on what the student captured / missed / had logical gaps in.
+
+    Body: {persona_id, question, student_argument, model_spec?}
+    """
+    import asyncio as _asyncio
+    import json as _json
+    import re as _re
+    import time as _time
+
+    from app.core.inference import get_strong_backend, get_backend_from_spec
+    from app.services.auto_loop import (
+        PHILOSOPHICAL_PERSONAS, ADVERSARIAL_SYSTEM_PROMPT,
+    )
+
+    persona_id = (body.get("persona_id") or "").strip()
+    question = (body.get("question") or "").strip()
+    student_argument = (body.get("student_argument") or "").strip()
+    model_spec = (body.get("model_spec") or "claude:claude-sonnet-4-6").strip()
+
+    if not persona_id or not question or not student_argument:
+        raise HTTPException(400, "persona_id, question, student_argument all required")
+    if len(student_argument) < 40:
+        raise HTTPException(400, "student_argument too short — needs at least 40 chars for meaningful grading")
+
+    persona = next((p for p in PHILOSOPHICAL_PERSONAS if p["id"] == persona_id), None)
+    if persona is None and persona_id == "adversary":
+        persona = {"id": "adversary", "name": "魔鬼代言人",
+                   "system_prompt": ADVERSARIAL_SYSTEM_PROMPT}
+    if persona is None:
+        raise HTTPException(404, f"unknown persona_id: {persona_id}")
+
+    user_prompt = (
+        f"问题：{question}\n\n"
+        f"请从你的哲学立场出发，对这个问题给出你的分析和立场（300 字以内）。"
+    )
+
+    async def _run_llm() -> tuple[str, float, str | None]:
+        t0 = _time.perf_counter()
+        try:
+            backend = get_backend_from_spec(model_spec, _auto_loop.tracker, tier="persona")
+            content = await backend.complete(
+                system_prompt=persona["system_prompt"],
+                messages=[{"role": "user", "content": user_prompt}],
+                max_tokens=700, temperature=0.7,
+            )
+            return content, (_time.perf_counter() - t0) * 1000, None
+        except Exception as e:
+            return "", (_time.perf_counter() - t0) * 1000, f"{type(e).__name__}: {str(e)[:200]}"
+
+    llm_content, llm_latency, llm_err = await _run_llm()
+    if llm_err:
+        raise HTTPException(500, f"persona LLM failed: {llm_err}")
+
+    # Grader
+    grader = get_strong_backend(_auto_loop.tracker)
+    grade_user = (
+        f"问题：{question}\n\n"
+        f"该传统/persona: {persona['name']} ({persona_id})\n\n"
+        f"--- 学生论证 ---\n{student_argument}\n\n"
+        f"--- 该传统的 LLM 范本 ---\n{llm_content}\n\n"
+        f"请按 schema 输出 JSON 评估。"
+    )
+    try:
+        raw = await grader.complete(
+            system_prompt=CLASSROOM_GRADE_SYSTEM,
+            messages=[{"role": "user", "content": grade_user}],
+            max_tokens=900, temperature=0.3,
+        )
+        raw = _re.sub(r"```(?:json)?\s*", "", raw or "")
+        raw = _re.sub(r"```\s*$", "", raw)
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        feedback = _json.loads(m.group(0)) if m else None
+    except Exception as e:
+        feedback = {"score": 0, "summary": f"grader failed: {type(e).__name__}",
+                    "got_right": [], "missed": [], "gaps": []}
+
+    return {
+        "persona_id": persona_id,
+        "persona_name": persona["name"],
+        "question": question,
+        "student_argument": student_argument,
+        "llm_argument": llm_content,
+        "llm_latency_ms": round(llm_latency, 1),
+        "feedback": feedback,
+    }
+
+
 AB_COMPARE_SYSTEM = (
     "你是一位 prompt 工程评估员。两段文本是同一个 persona 用**两个不同 system "
     "prompt 版本** (A 和 B) 回答**同一个问题**的结果。你的任务是评估哪个 prompt "

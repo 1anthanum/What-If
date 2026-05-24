@@ -21,6 +21,8 @@ import {
   type ConsistencyReport,
 } from '../../services/sessionsApi';
 import { useTimeCapsuleStore, ageInDays, REVIEW_AGE_DAYS } from '../../store/timeCapsuleStore';
+import { useAutoLoopStore } from '../../store/autoLoopStore';
+import { useNavStore } from '../../store/navStore';
 
 interface Props {
   onClose: () => void;
@@ -302,7 +304,7 @@ export function SessionBrowser({ onClose }: Props) {
             ) : !detail ? (
               <p className="text-[12px] text-deep-200/55 italic text-center py-6">载入详情…</p>
             ) : (
-              <SessionDetailView detail={detail} />
+              <SessionDetailView detail={detail} onCloseBrowser={onClose} />
             )}
           </div>
         </div>
@@ -450,22 +452,40 @@ function ConsistencyTestModal({ sessionId, onClose }: { sessionId: string; onClo
   );
 }
 
-function SessionDetailView({ detail }: { detail: SessionDetail }) {
+function SessionDetailView({ detail, onCloseBrowser }: { detail: SessionDetail; onCloseBrowser: () => void }) {
   const [consistencyOpen, setConsistencyOpen] = useState(false);
+  const loadFromArchive = useAutoLoopStore((s) => s.loadFromArchive);
+  const setActiveModule = useNavStore((s) => s.setActiveModule);
+
+  const reopenLive = () => {
+    loadFromArchive(detail);
+    setActiveModule('orchestrator');
+    onCloseBrowser();
+  };
+
   return (
     <div className="space-y-3 pl-3 pr-1">
       <div>
-        <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-baseline justify-between gap-2 flex-wrap">
           <p className="text-[11px] font-mono text-amber-300/80 uppercase tracking-wider">
             种子假设
           </p>
-          <button
-            onClick={() => setConsistencyOpen(true)}
-            className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-purple-400/45 text-purple-200 hover:bg-purple-400/[0.08] transition-colors"
-            title="用当下的 LLM 重跑同一问题，对比 persona 立场是否漂移"
-          >
-            ⏱ 时间一致性测试
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={reopenLive}
+              className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-amber-300/55 bg-amber-300/[0.06] text-amber-200 hover:bg-amber-300/[0.14] transition-colors"
+              title="把这个 session 加载到 AutoLoop 视图（只读重放，可继续追问 / A/B 测试 / 多模型对比）"
+            >
+              ▶ 重新打开为 live
+            </button>
+            <button
+              onClick={() => setConsistencyOpen(true)}
+              className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-purple-400/45 text-purple-200 hover:bg-purple-400/[0.08] transition-colors"
+              title="用当下的 LLM 重跑同一问题，对比 persona 立场是否漂移"
+            >
+              ⏱ 一致性测试
+            </button>
+          </div>
         </div>
         <p className="text-[13px] text-deep-50 leading-relaxed mt-1">{detail.seed_hypothesis}</p>
       </div>

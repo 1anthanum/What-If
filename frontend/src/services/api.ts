@@ -772,6 +772,24 @@ export interface PromptABScores {
   falsifiability: number;
 }
 
+export interface ClassroomFeedback {
+  score: number;
+  got_right: string[];
+  missed: string[];
+  gaps: string[];
+  summary: string;
+}
+
+export interface ClassroomGradeResponse {
+  persona_id: string;
+  persona_name: string;
+  question: string;
+  student_argument: string;
+  llm_argument: string;
+  llm_latency_ms: number;
+  feedback: ClassroomFeedback;
+}
+
 export interface PromptABResponse {
   persona_id: string;
   question: string;
@@ -994,6 +1012,18 @@ export const autoLoopApi = {
     model_spec?: string;
   }) =>
     request<PromptABResponse>(`/orchestrator/persona/ab_test`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Classroom grade — compare student's argument against LLM persona's version. */
+  classroomGrade: (body: {
+    persona_id: string;
+    question: string;
+    student_argument: string;
+    model_spec?: string;
+  }) =>
+    request<ClassroomGradeResponse>(`/orchestrator/persona/classroom_grade`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

@@ -56,6 +56,7 @@ export function AutoLoopView() {
     stoppedReason,
     elapsedSeconds,
     activePersonaId,
+    replayed,
     finalSynthesis,
     finalSynthPending,
   } = store;
@@ -174,6 +175,25 @@ export function AutoLoopView() {
 
   return (
     <div className="space-y-6 relative">
+      {/* Replay-mode banner — shown when this view was hydrated from an
+          archived session via SessionBrowser "▶ 重新打开 live" */}
+      {replayed && store.sessionId && (
+        <div className="rounded-lg border border-amber-300/45 bg-amber-300/[0.05] px-3 py-2 flex items-center gap-3 animate-fade-in">
+          <span className="text-[13px]">🗂</span>
+          <p className="flex-1 text-[12px] text-deep-50 leading-snug">
+            正在浏览历史 session <span className="font-mono text-amber-300">#{store.sessionId}</span>
+            （只读重放） — 所有 persona / verdict / falsifiability 已重建。可继续 💬 追问 /
+            🔀 对比模型 / 🆚 A/B 测试，但不能再延展 cycle。
+          </p>
+          <button
+            onClick={() => store.reset()}
+            className="text-[10px] font-mono uppercase tracking-wider px-2.5 py-1 rounded border border-amber-300/45 text-amber-200 hover:bg-amber-300/[0.12]"
+          >
+            ✕ 退出重放
+          </button>
+        </div>
+      )}
+
       {/* ── Background ambient pulse when running ── */}
       {status === 'running' && (
         <div className="fixed inset-0 pointer-events-none z-0">
@@ -351,6 +371,24 @@ export function AutoLoopView() {
                                 <p className="text-[10px] font-mono tk-cool-soft italic mt-1 leading-snug">
                                   钩子：{p.hook}
                                 </p>
+                                {(p.difficulty || p.classical_source) && (
+                                  <div className="flex flex-wrap items-baseline gap-1.5 mt-1.5">
+                                    {p.difficulty && (
+                                      <span className={`text-[8px] font-mono uppercase tracking-wider px-1 py-0.5 rounded border ${
+                                        p.difficulty === 'intro' ? 'border-earth-green/40 text-earth-green/85'
+                                        : p.difficulty === 'advanced' ? 'border-earth-rust/40 text-earth-rust/85'
+                                        : 'border-amber-300/35 text-amber-300/80'
+                                      }`}>
+                                        {p.difficulty === 'intro' ? '入门' : p.difficulty === 'advanced' ? '进阶' : '中等'}
+                                      </span>
+                                    )}
+                                    {p.classical_source && (
+                                      <span className="text-[8px] font-mono text-deep-200/60 italic truncate max-w-[180px]" title={p.classical_source}>
+                                        📖 {p.classical_source}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </button>
                             );
                           })}

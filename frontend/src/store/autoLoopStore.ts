@@ -99,6 +99,14 @@ interface AutoLoopState {
   toggleSpectator: () => void;
   /** Append a Socratic follow-up Q&A to a persona in a specific cycle. */
   appendPersonaFollowup: (cycleNum: number, personaId: string, followup: string, response: string) => void;
+
+  // ── Replay mode (archive reopen) ──
+  /** True when the store was populated from a persisted session via
+   *  `loadFromArchive`; UI shows a banner + suppresses live controls. */
+  replayed: boolean;
+  /** Hydrate store from a SessionDetail. Status becomes 'complete' so no
+   *  streaming logic fires; cycles render in read-only mode. */
+  loadFromArchive: (detail: import('../services/sessionsApi').SessionDetail) => void;
 }
 
 const initialState = {
@@ -122,7 +130,13 @@ const initialState = {
   spectatorOpen: false,
   startedAt: null as number | null,
   elapsedSeconds: 0,
+  replayed: false,
 };
+
+const _FALS_RE = /(?:^|\n)\s*\**\s*(?:可证伪线|Falsifiability\s+line)\s*[:：]\s*(.+)$/i;
+function _hasFalsifiability(content: string): boolean {
+  return _FALS_RE.test(content || '');
+}
 
 export const useAutoLoopStore = create<AutoLoopState>()(
   persist(
@@ -576,6 +590,61 @@ export const useAutoLoopStore = create<AutoLoopState>()(
       updated[idx] = { ...updated[idx], personas };
       return { cycles: updated };
     }),
+
+  loadFromArchive: (detail) => {
+    // Map archive shape → live CycleState shape, restoring all the rich
+    // annotations (falsifiability, dogmatic flag, judge verdict) that the
+    // UI's PersonaCard / CycleDetail know how to render.
+    const cycles: CycleState[] = (detail.cycles || []).map((c) => ({
+      cycle: c.cycle_num,
+      hypothesis: c.hypothesis,
+      loopId: '',
+      synthesisPreview: c.synthesis || '',
+      nextHypothesis: c.next_hypothesis || '',
+      converged: !!c.converged,
+      activeModule: null,
+      currentIteration: 0,
+      personas: (c.personas || []).map((p) => ({
+        id: p.persona_id,
+        name: p.persona_name,
+        role: '',
+        model: p.model || '',
+        content: p.content,
+        streaming: false,
+        // Persisted is_dogmatic is the source of truth, but PersonaCard
+        // derives its own from content + falsifiability presence. Both
+        // sources should agree after this.
+      })),
+      stanceMatrix: null,
+      candidateQuestions: [],
+      subQuestions: [],
+      judgeVerdict: c.judge_verdict || null,
+    }));
+
+    // Evolution chain = seed + each cycle's hypothesis
+    const evolution = [detail.seed_hypothesis, ...cycles.map((c) => c.hypothesis)];
+
+    set({
+      ...initialState,
+      sessionId: detail.session_id,
+      config: null,
+      mode: detail.mode,
+      status: 'complete',
+      currentCycle: cycles.length,
+      maxCycles: cycles.length,
+      cycles,
+      evolutionChain: evolution,
+      stoppedReason: detail.stopped_reason || 'archived',
+      finalSynthesis: detail.final_synthesis || '',
+      finalSynthPending: false,
+      adversarial: !!detail.flags?.adversarial,
+      extractStances: !!detail.flags?.extract_stances,
+      branching: !!detail.flags?.branching,
+      startedAt: null,
+      elapsedSeconds: detail.elapsed_seconds || 0,
+      replayed: true,
+    });
+  },
 
   tick: () => {
     const { startedAt, status } = get();
