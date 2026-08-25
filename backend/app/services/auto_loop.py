@@ -683,12 +683,15 @@ class AutoLoopScheduler:
         if _drop:
             self._active_personas = [p for p in self._active_personas
                                      if p["id"] != _drop]
-        # K-personas ablation (paper-2 supplementary, 2026-05-21):
+        # K-personas ablation (paper-2 supplementary, 2026-05-21;
+        # default fixed 2026-06-10 — see paper-2 docs/adr/0011):
         # WHATIF_PERSONA_K=N slices the active persona list to the first N
-        # entries. Combined with PHILOSOPHICAL_PERSONAS extended to 10, this
-        # supports K ∈ {2..10}. The first 5 indices are unchanged from the
-        # original B3 schema, so K=5 (or unset) reproduces the headline runs.
-        _k_str = _os_loo.environ.get("WHATIF_PERSONA_K", "").strip()
+        # entries. The default is "5" so unset reproduces the headline
+        # 5-persona runs even when PHILOSOPHICAL_PERSONAS has been extended
+        # (currently 10 to support K ∈ {6..10} in the K-curve sweep). Callers
+        # that *want* the full extended list must set WHATIF_PERSONA_K to
+        # len(PHILOSOPHICAL_PERSONAS) explicitly.
+        _k_str = _os_loo.environ.get("WHATIF_PERSONA_K", "5").strip()
         if _k_str:
             try:
                 _k = int(_k_str)
@@ -696,6 +699,20 @@ class AutoLoopScheduler:
                     self._active_personas = self._active_personas[:_k]
             except ValueError:
                 pass
+        # Persona-pair (paper-2 supplementary, 2026-05-23):
+        # WHATIF_PERSONA_IDS=id1,id2,... selects a specific subset of personas
+        # by id (case-sensitive, comma-separated). **Overrides** WHATIF_PERSONA_K
+        # by re-resolving from the full PHILOSOPHICAL_PERSONAS list, so the
+        # K-slicing above is discarded. Lets us test "which K=2 pair drives
+        # the strongest B3 advantage" without renaming personas.
+        _ids_str = _os_loo.environ.get("WHATIF_PERSONA_IDS", "").strip()
+        if _ids_str:
+            wanted = [s.strip() for s in _ids_str.split(",") if s.strip()]
+            # Resolve from full list, preserving order in WHATIF_PERSONA_IDS
+            by_id = {p["id"]: p for p in PHILOSOPHICAL_PERSONAS}
+            ordered = [by_id[w] for w in wanted if w in by_id]
+            if ordered:
+                self._active_personas = ordered
         # Y4 ablation: per-run extractor config (dict → ExtractorConfig built
         # at the cycle call site). None means "use ExtractorConfig() defaults".
         self._extractor_config_dict = extractor_config or None
@@ -703,8 +720,13 @@ class AutoLoopScheduler:
         if shuffle_personas:
             from app.research.shuffle import derange_personas, is_derangement
             assert shuffle_seed is not None  # enforced in run() wrapper
-            self._active_personas = derange_personas(PHILOSOPHICAL_PERSONAS, shuffle_seed)
-            assert is_derangement(PHILOSOPHICAL_PERSONAS, self._active_personas)
+            # 2026-06-13 fix (paper-2 docs/adr/0011 §followup): derange the
+            # ALREADY-K-sliced active list, not the full PHILOSOPHICAL_PERSONAS.
+            # Pre-fix, shuffle silently expanded a K-sliced ablation back to
+            # K=len(PHILOSOPHICAL_PERSONAS) — invisible K confound.
+            _pre_shuffle = list(self._active_personas)
+            self._active_personas = derange_personas(_pre_shuffle, shuffle_seed)
+            assert is_derangement(_pre_shuffle, self._active_personas)
             shuffle_meta = {
                 "enabled": True,
                 "seed": shuffle_seed,
